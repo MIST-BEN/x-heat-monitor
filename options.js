@@ -1,5 +1,5 @@
 /**
- * X Heat Pulse - Options Page Controller
+ * X Heat Pulse - Options Page Controller (v1.4.2)
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -30,7 +30,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // Save handler
-  document.getElementById("btn-save").addEventListener("click", () => {
+  document.getElementById("btn-save").addEventListener("click", async () => {
+    const cleanHandle = document.getElementById("myHandle").value.trim().replace(/^@/, '');
     const updated = {
       intervalMinutes: parseInt(document.getElementById("intervalMinutes").value, 10),
       alertThreshold: parseInt(document.getElementById("alertThreshold").value, 10),
@@ -43,11 +44,29 @@ document.addEventListener("DOMContentLoaded", async () => {
         views: parseFloat(document.getElementById("w-views").value)
       },
       apiToken: document.getElementById("apiToken").value.trim(),
-      myHandle: document.getElementById("myHandle").value.trim().replace(/^@/, '')
+      myHandle: cleanHandle
     };
 
-    if (updated.myHandle) {
-      chrome.storage.local.set({ my_user_handle: updated.myHandle });
+    if (cleanHandle) {
+      const curStorage = await chrome.storage.local.get("tweet_records");
+      const records = curStorage.tweet_records || {};
+      for (const id in records) {
+        if (records[id].author && records[id].author.toLowerCase() === cleanHandle.toLowerCase()) {
+          records[id].isOwnTweet = true;
+        }
+      }
+      await chrome.storage.local.set({
+        my_user_handle: cleanHandle,
+        tweet_records: records
+      });
+
+      chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
+        tabs.forEach(tab => {
+          if (tab.id) {
+            chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: cleanHandle }, () => {});
+          }
+        });
+      });
     }
 
     chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: updated }, () => {

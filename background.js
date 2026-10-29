@@ -1,6 +1,7 @@
 /**
- * X Heat Pulse - Background Service Worker
+ * X Heat Pulse - Background Service Worker (v1.4.2)
  * Network-grade metric collection, rate limiting, and differential analysis.
+ * Exclusively monitors and aggregates the creator's own posts for the toolbar badge.
  */
 
 const DEFAULT_CONFIG = {
@@ -17,9 +18,9 @@ const DEFAULT_CONFIG = {
   apiToken: "" // Optional user-provided X API v2 Bearer Token
 };
 
-// 1. Extension Lifecycle: setup alarms and defaults
+// 1. Extension Lifecycle: setup alarms, defaults, and auto-inject into open tabs
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log("[X-Heat-Pulse] Extension initialized.");
+  console.log("[X-Heat-Pulse] Extension initialized/updated.");
   const existing = await chrome.storage.local.get("config");
   let cfg = existing.config || DEFAULT_CONFIG;
   if (!existing.config || existing.config.intervalMinutes === 5) {
@@ -29,6 +30,25 @@ chrome.runtime.onInstalled.addListener(async () => {
 
   // Setup periodic alarm
   setupAlarm(cfg.intervalMinutes);
+
+  // Auto-inject content script into open Twitter/X tabs so users don't need manual reload
+  try {
+    const tabs = await chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] });
+    for (const tab of tabs) {
+      if (tab.id) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ["content_script.js"]
+        }).catch(() => {});
+        chrome.scripting.insertCSS({
+          target: { tabId: tab.id },
+          files: ["content_style.css"]
+        }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.warn("[X-Heat-Pulse] Tab auto-injection skipped:", e);
+  }
 
   // Trigger immediate sample
   executePollingCycle("INSTALL_INIT").catch(err => {
@@ -40,7 +60,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 function setupAlarm(intervalMinutes) {
   chrome.alarms.clear("x_heat_polling", () => {
     chrome.alarms.create("x_heat_polling", {
-      periodInMinutes: Math.max(1, intervalMinutes || 5)
+      periodInMinutes: Math.max(1, intervalMinutes || 3)
     });
     console.log(`[X-Heat-Pulse] Alarm set for every ${intervalMinutes} minutes.`);
   });
@@ -84,364 +104,92 @@ async function executePollingCycle(source = "SCHEDULED") {
   const storage = await chrome.storage.local.get(["config", "last_metrics", "history", "account_info", "tweet_records", "my_user_handle"]);
   const config = storage.config || DEFAULT_CONFIG;
   const history = storage.history || [];
-  const lastMetrics = storage.last_metrics || null;
   const tweetRecords = storage.tweet_records || {};
   const myHandle = (storage.my_user_handle || config.myHandle || "").trim().toLowerCase();
 
   try {
-    let currentData = [];
-    let accountInfo = storage.account_info || null;
-
-    // Priority 1: Check if we have real in-page captured tweet records for OWN account
     const allRecords = Object.values(tweetRecords);
     const ownRecords = allRecords.filter(t => t.isOwnTweet || (myHandle && t.author && t.author.toLowerCase() === myHandle));
 
-    // If own tweets exist, strictly track own tweets!
-    const targetRecords = ownRecords.length > 0 ? ownRecords : (allRecords.length > 0 ? allRecords : []);
+    // Calculate view increments specifically for user's own posts
+    let totalOwnViewsDelta = 0;
+    const targetIntervalMs = (config.intervalMinutes || 3) * 60 * 1000;
 
-    if (targetRecords.length > 0) {
-      currentData = targetRecords.map(item => {
-        const lastSnap = item.snapshots && item.snapshots.length > 0 ? item.snapshots[item.snapshots.length - 1] : {};
-        return {
-          id: item.id,
-          text: item.text || "",
-          metrics: {
-            views: lastSnap.views || 0,
-            likes: lastSnap.likes || 0,
-            retweets: lastSnap.retweets || 0,
-            replies: lastSnap.replies || 0,
-            bookmarks: lastSnap.bookmarks || 0
+    if (ownRecords.length > 0) {
+      for (const item of ownRecords) {
+        const snaps = item.snapshots || [];
+        if (snaps.length > 0) {
+          const curr = snaps[snaps.length - 1];
+          let baseSnap = snaps[0];
+          let minDiff = Infinity;
+          for (const s of snaps) {
+            const diff = Math.abs(s.t - (timestamp - targetIntervalMs));
+            if (diff < minDiff) {
+              minDiff = diff;
+              baseSnap = s;
+            }
           }
-        };
-      });
-
-      accountInfo = {
-        screen_name: myHandle || targetRecords[0].author || "You",
-        name: myHandle || targetRecords[0].author || "You",
-        type: ownRecords.length > 0 ? "own_account_tracker" : "in_page_observer"
-      };
-    } else {
-      // Priority 2: Fallback to session / API fetch
-      const metricResult = await fetchXMetrics(config);
-      if (metricResult && metricResult.tweets) {
-        currentData = metricResult.tweets;
-        accountInfo = metricResult.account;
-      }
-    }
-
-    if (!currentData || currentData.length === 0) {
-      console.warn("[X-Heat-Pulse] No tweets available yet. Waiting for x.com page visit.");
-      chrome.action.setBadgeText({ text: "0" });
-      chrome.action.setBadgeBackgroundColor({ color: "#64748B" });
-      return null;
-    }
-
-    // Differential Calculation
-    let totalDeltaHeat = 0;
-    const deltaBreakdown = {
-      views: 0,
-      likes: 0,
-      retweets: 0,
-      replies: 0,
-      bookmarks: 0
-    };
-
-    const tweetDeltas = [];
-
-    if (lastMetrics && lastMetrics.data) {
-      const prevMap = new Map(lastMetrics.data.map(t => [t.id, t.metrics]));
-      const intervalMs = timestamp - lastMetrics.timestamp;
-
-      // Avoid calculating huge delta if paused/offline for over 2x interval
-      const maxInterval = (config.intervalMinutes * 2 + 2) * 60 * 1000;
-      const isWindowValid = intervalMs <= maxInterval;
-
-      if (isWindowValid) {
-        for (const tweet of currentData) {
-          const prev = prevMap.get(tweet.id) || { views: 0, likes: 0, retweets: 0, replies: 0, bookmarks: 0 };
-          const curr = tweet.metrics;
-
-          // Monotonic guard (Math.max(0, ...)) to suppress X eventual consistency jitter
-          const dViews = Math.max(0, (curr.views || 0) - (prev.views || 0));
-          const dLikes = Math.max(0, (curr.likes || 0) - (prev.likes || 0));
-          const dRetweets = Math.max(0, (curr.retweets || 0) - (prev.retweets || 0));
-          const dReplies = Math.max(0, (curr.replies || 0) - (prev.replies || 0));
-          const dBookmarks = Math.max(0, (curr.bookmarks || 0) - (prev.bookmarks || 0));
-
-          const tweetHeatDelta = Math.round(
-            dViews * config.weights.views +
-            dLikes * config.weights.likes +
-            dRetweets * config.weights.retweets +
-            dReplies * config.weights.replies +
-            dBookmarks * config.weights.bookmarks
-          );
-
-          deltaBreakdown.views += dViews;
-          deltaBreakdown.likes += dLikes;
-          deltaBreakdown.retweets += dRetweets;
-          deltaBreakdown.replies += dReplies;
-          deltaBreakdown.bookmarks += dBookmarks;
-
-          totalDeltaHeat += tweetHeatDelta;
-
-          if (tweetHeatDelta > 0 || (curr.views || 0) > 0) {
-            tweetDeltas.push({
-              id: tweet.id,
-              text: tweet.text,
-              heatDelta: tweetHeatDelta,
-              delta: { views: dViews, likes: dLikes, retweets: dRetweets, replies: dReplies, bookmarks: dBookmarks },
-              current: curr
-            });
-          }
+          const dViews = Math.max(0, (curr.views || 0) - (baseSnap.views || 0));
+          totalOwnViewsDelta += dViews;
         }
-      } else {
-        console.log("[X-Heat-Pulse] Time gap exceeded threshold, resetting baseline.");
       }
     }
 
-    // Sort tweets by heat delta descending
-    tweetDeltas.sort((a, b) => b.heatDelta - a.heatDelta);
+    // Update Chrome toolbar badge icon: exclusively tracks own posts' view increments
+    updateToolbarBadge(totalOwnViewsDelta, ownRecords.length > 0);
 
-    // Record to time-series history
-    const sampleRecord = {
-      timestamp,
-      heatDelta: totalDeltaHeat,
-      breakdown: deltaBreakdown,
-      monitoredTweetsCount: currentData.length,
-      topTweet: tweetDeltas[0] || null
-    };
-
-    history.push(sampleRecord);
-    // Keep 288 points (24 hours at 5-minute sampling)
-    if (history.length > 288) {
-      history.shift();
-    }
-
-    // Persist new state
+    // Save polling status
     await chrome.storage.local.set({
-      last_metrics: {
-        timestamp,
-        data: currentData
-      },
-      history,
-      account_info: accountInfo,
       last_poll_status: {
         success: true,
         timestamp,
-        totalDeltaHeat
+        totalOwnViewsDelta,
+        monitoredOwnCount: ownRecords.length
       }
     });
 
-    // Update Extension Badge
-    updateBadge(totalDeltaHeat);
-
-    // Burst Alert Notification
-    if (config.enableNotification && totalDeltaHeat >= config.alertThreshold && lastMetrics) {
-      triggerNotification(totalDeltaHeat, sampleRecord.topTweet);
+    // Burst Alert Notification if own tweets spike
+    if (config.enableNotification && totalOwnViewsDelta >= config.alertThreshold && ownRecords.length > 0) {
+      triggerNotification(totalOwnViewsDelta, ownRecords[0]);
     }
 
-    return sampleRecord;
+    return { totalOwnViewsDelta, ownRecordsCount: ownRecords.length };
   } catch (error) {
     console.error("[X-Heat-Pulse] Polling cycle failed:", error);
-    await chrome.storage.local.set({
-      last_poll_status: {
-        success: false,
-        timestamp,
-        error: error.message
-      }
-    });
     chrome.action.setBadgeText({ text: "ERR" });
     chrome.action.setBadgeBackgroundColor({ color: "#EF4444" });
     throw error;
   }
 }
 
-// 5. Update Action Badge UI
-function updateBadge(heatDelta) {
-  if (heatDelta > 0) {
-    const text = heatDelta > 999 ? `${(heatDelta / 1000).toFixed(1)}k` : `+${heatDelta}`;
+// 5. Update Action Badge UI (Exclusively displays user's own post view increments)
+function updateToolbarBadge(viewsDelta, hasOwnPosts) {
+  if (!hasOwnPosts) {
+    chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+  if (viewsDelta > 0) {
+    const text = viewsDelta > 999 ? `${(viewsDelta / 1000).toFixed(1)}k` : `+${viewsDelta}`;
     chrome.action.setBadgeText({ text });
-    if (heatDelta >= 50) {
-      chrome.action.setBadgeBackgroundColor({ color: "#F59E0B" }); // Gold/High heat
+    if (viewsDelta >= 50) {
+      chrome.action.setBadgeBackgroundColor({ color: "#F43F5E" }); // Hot rose
     } else {
       chrome.action.setBadgeBackgroundColor({ color: "#10B981" }); // Emerald green
     }
   } else {
     chrome.action.setBadgeText({ text: "0" });
-    chrome.action.setBadgeBackgroundColor({ color: "#64748B" }); // Slate grey
+    chrome.action.setBadgeBackgroundColor({ color: "#64748B" }); // Neutral slate
   }
 }
 
 // 6. Trigger Chrome Notification for traffic spikes
-function triggerNotification(heatDelta, topTweet) {
-  const tweetSnippet = topTweet ? `Top推文: "${topTweet.text.substring(0, 40)}..." (+${topTweet.heatDelta})` : "";
+function triggerNotification(viewsDelta, topTweet) {
+  const tweetSnippet = topTweet ? `推文: "${(topTweet.text || '').substring(0, 40)}..."` : "";
   chrome.notifications.create({
     type: "basic",
     iconUrl: "icons/icon128.png",
-    title: `🔥 X 热度激增提醒: +${heatDelta} (5min)`,
-    message: `检测到您的账号推文在最近5分钟内热度显著爆发！\n${tweetSnippet}`,
+    title: `🔥 X 专属推文浏览激增: +${viewsDelta}`,
+    message: `您的账号推文在最近3分钟内浏览量增加 +${viewsDelta} 次！\n${tweetSnippet}`,
     priority: 2
   });
-}
-
-// 7. Network Engine: Fetch metrics from X (Cookie Session or Bearer API)
-async function fetchXMetrics(config) {
-  // Method 1: If user provided Official X API Bearer Token
-  if (config.apiToken && config.apiToken.trim() !== "") {
-    return await fetchViaOfficialAPI(config.apiToken.trim());
-  }
-
-  // Method 2: Inspect active cookies on x.com or twitter.com
-  let ct0Cookie = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
-  let authTokenCookie = await chrome.cookies.get({ url: "https://x.com", name: "auth_token" });
-
-  if (!ct0Cookie || !authTokenCookie) {
-    ct0Cookie = await chrome.cookies.get({ url: "https://twitter.com", name: "ct0" });
-    authTokenCookie = await chrome.cookies.get({ url: "https://twitter.com", name: "auth_token" });
-  }
-
-  if (ct0Cookie && authTokenCookie) {
-    try {
-      const data = await fetchViaWebSession(ct0Cookie.value);
-      if (data) return data;
-    } catch (e) {
-      console.warn("[X-Heat-Pulse] Web session fetch failed, fallback to local buffer/mock:", e);
-    }
-  }
-
-  // Method 3: Fallback / Mock Generator for testing if not logged in
-  return generateDemoMetrics();
-}
-
-// Helper: Query X Web Internal GraphQL API
-async function fetchViaWebSession(csrfToken) {
-  // Query current user's profile to resolve screen_name
-  const userResp = await fetch("https://x.com/i/api/1.1/account/settings.json", {
-    headers: {
-      "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
-      "x-csrf-token": csrfToken,
-      "x-twitter-active-user": "yes"
-    }
-  });
-
-  if (!userResp.ok) {
-    throw new Error(`Account settings request returned HTTP ${userResp.status}`);
-  }
-
-  const userSettings = await userResp.json();
-  const screenName = userSettings.screen_name;
-
-  // Retrieve user's recent tweets
-  const tweetsResp = await fetch(`https://x.com/i/api/1.1/statuses/user_timeline.json?screen_name=${screenName}&count=10&tweet_mode=extended`, {
-    headers: {
-      "authorization": "Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA",
-      "x-csrf-token": csrfToken,
-      "x-twitter-active-user": "yes"
-    }
-  });
-
-  if (!tweetsResp.ok) {
-    throw new Error(`Timeline fetch returned HTTP ${tweetsResp.status}`);
-  }
-
-  const timeline = await tweetsResp.json();
-  const tweets = timeline.map(item => ({
-    id: item.id_str,
-    text: item.full_text || item.text,
-    created_at: item.created_at,
-    metrics: {
-      views: item.ext_views ? parseInt(item.ext_views.count || 0) : 0,
-      likes: item.favorite_count || 0,
-      retweets: item.retweet_count || 0,
-      replies: item.reply_count || 0,
-      bookmarks: item.bookmark_count || 0
-    }
-  }));
-
-  return {
-    account: {
-      screen_name: screenName,
-      name: screenName,
-      type: "session_authenticated"
-    },
-    tweets
-  };
-}
-
-// Helper: Query via Official X API v2
-async function fetchViaOfficialAPI(bearerToken) {
-  const meResp = await fetch("https://api.twitter.com/2/users/me", {
-    headers: { "Authorization": `Bearer ${bearerToken}` }
-  });
-  if (!meResp.ok) throw new Error(`API Me error: ${meResp.status}`);
-  const meData = await meResp.json();
-  const userId = meData.data.id;
-
-  const tweetsResp = await fetch(
-    `https://api.twitter.com/2/users/${userId}/tweets?max_results=10&tweet.fields=public_metrics,created_at`,
-    { headers: { "Authorization": `Bearer ${bearerToken}` } }
-  );
-  if (!tweetsResp.ok) throw new Error(`API Tweets error: ${tweetsResp.status}`);
-  const tweetsData = await tweetsResp.json();
-
-  const tweets = (tweetsData.data || []).map(item => ({
-    id: item.id,
-    text: item.text,
-    created_at: item.created_at,
-    metrics: {
-      views: item.public_metrics?.impression_count || 0,
-      likes: item.public_metrics?.like_count || 0,
-      retweets: item.public_metrics?.retweet_count || 0,
-      replies: item.public_metrics?.reply_count || 0,
-      bookmarks: item.public_metrics?.bookmark_count || 0
-    }
-  }));
-
-  return {
-    account: {
-      screen_name: meData.data.username,
-      name: meData.data.name,
-      type: "api_v2_authenticated"
-    },
-    tweets
-  };
-}
-
-// Helper: Realistic Demo Metrics Generator (When no session/API is detected)
-let mockCache = null;
-function generateDemoMetrics() {
-  if (!mockCache) {
-    mockCache = [
-      {
-        id: "mock_tweet_101",
-        text: "深入剖析现代数据中心的 BGP EVPN 架构设计与状态同步机制 #Networking #BGP",
-        created_at: new Date(Date.now() - 3600000).toISOString(),
-        metrics: { views: 1840, likes: 62, retweets: 14, replies: 9, bookmarks: 28 }
-      },
-      {
-        id: "mock_tweet_102",
-        text: "写了一个检测自己 X 账号帖子热度一阶差分的 Chrome 插件，5分钟周期采样吞吐量！",
-        created_at: new Date(Date.now() - 7200000).toISOString(),
-        metrics: { views: 3200, likes: 145, retweets: 35, replies: 22, bookmarks: 64 }
-      }
-    ];
-  } else {
-    // Add realistic 5-min incremental drift
-    mockCache.forEach(t => {
-      t.metrics.views += Math.floor(Math.random() * 25) + 5;
-      if (Math.random() > 0.4) t.metrics.likes += Math.floor(Math.random() * 3) + 1;
-      if (Math.random() > 0.7) t.metrics.retweets += 1;
-      if (Math.random() > 0.8) t.metrics.replies += 1;
-      if (Math.random() > 0.6) t.metrics.bookmarks += 1;
-    });
-  }
-
-  return {
-    account: {
-      screen_name: "NetworkEngineer_Demo",
-      name: "Network Ops (Demo Mode)",
-      type: "demo_simulation"
-    },
-    tweets: JSON.parse(JSON.stringify(mockCache))
-  };
 }

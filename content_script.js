@@ -1,50 +1,77 @@
 /**
- * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.4.0)
+ * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.4.2)
  * 1. Automatically detects logged-in user's own handle (@username).
  * 2. Tags user's own tweets with isOwnTweet: true to filter out feed/timeline noise.
  * 3. Default 3-minute high-sensitivity sampling interval.
  * 4. Dual-display badges and dynamic comparison tables with overflow protection.
+ * 5. Pill badge exclusively highlights view increments (3m +XX | 累计 +XX) to keep action bar clean.
+ * 6. Video/media player isolation ensures badges are always attached to the bottom tweet action bar.
  */
 
 (function () {
   'use strict';
 
-  console.log('[X-Heat-Pulse] v1.4.0 Content script active.');
+  // Prevent multiple injections in the same frame
+  if (window.__X_HEAT_PULSE_LOADED__) {
+    console.log('[X-Heat-Pulse] Content script already active. Triggering rescan.');
+    if (typeof window.__X_HEAT_PULSE_SCAN__ === 'function') {
+      window.__X_HEAT_PULSE_SCAN__();
+    }
+    return;
+  }
+  window.__X_HEAT_PULSE_LOADED__ = true;
+
+  console.log('[X-Heat-Pulse] v1.4.2 Content script initialized.');
 
   const DEFAULT_INTERVAL_MINUTES = 3;
   let isScanning = false;
   let scanTimeout = null;
   let myHandle = null;
 
-  function scheduleScan() {
-    if (scanTimeout) clearTimeout(scanTimeout);
-    scanTimeout = setTimeout(processAllVisibleTweets, 250);
+  function isExtensionValid() {
+    return typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
   }
 
-  // Detect current logged-in user's screen name
+  function scheduleScan() {
+    if (scanTimeout) clearTimeout(scanTimeout);
+    scanTimeout = setTimeout(processAllVisibleTweets, 200);
+  }
+  window.__X_HEAT_PULSE_SCAN__ = scheduleScan;
+
+  // Multi-tier detection for the logged-in user's handle
   function detectMyHandle() {
-    // 1. Check left sidebar profile link (most reliable on desktop)
-    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    // 1. Check left navigation banner for user account switcher (100% reliable on desktop)
+    const switcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+    if (switcher) {
+      const match = switcher.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
+      if (match && match[1]) return match[1];
+    }
+
+    // 2. Search anywhere inside left navigation header for @username
+    const headerBanner = document.querySelector('header[role="banner"]');
+    if (headerBanner) {
+      const match = headerBanner.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
+      if (match && match[1]) return match[1];
+    }
+
+    // 3. Check sidebar profile navigation link
+    const profileLink = document.querySelector(
+      'a[data-testid="AppTabBar_Profile_Link"], a[aria-label="Profile"], a[aria-label="个人资料"]'
+    );
     if (profileLink) {
       const href = profileLink.getAttribute('href') || '';
-      const h = href.replace(/^\//, '').split('/')[0].split('?')[0].trim();
-      if (h && !['home', 'explore', 'notifications', 'messages', 'i', 'settings'].includes(h.toLowerCase())) {
+      const cleanHref = href.replace(/^https?:\/\/[^\/]+/, '').replace(/^\//, '');
+      const h = cleanHref.split('/')[0].split('?')[0].trim();
+      if (h && !['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'search'].includes(h.toLowerCase())) {
         return h;
       }
     }
 
-    // 2. Check left sidebar account switcher button
-    const switcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
-    if (switcher) {
-      const match = switcher.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
-      if (match) return match[1];
-    }
-
-    // 3. Check profile page URL if currently viewing own profile
+    // 4. Check profile page URL if currently viewing own profile
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    if (pathParts.length === 1 && !['home', 'explore', 'notifications', 'messages'].includes(pathParts[0].toLowerCase())) {
-      // If header says "Edit profile" button exists on page, it's definitely the user's profile!
-      const editBtn = document.querySelector('a[href="/settings/profile"], [data-testid="empty_state_button_text"]');
+    if (pathParts.length === 1 && !['home', 'explore', 'notifications', 'messages', 'search'].includes(pathParts[0].toLowerCase())) {
+      // If page has "Edit profile" button or settings link, user is on their own profile
+      const editBtn = document.querySelector('a[href="/settings/profile"], [data-testid="editProfileButton"], [data-testid="empty_state_button_text"]');
       if (editBtn) {
         return pathParts[0];
       }
@@ -120,14 +147,71 @@
     return 0;
   }
 
-  // Extract metrics from single tweet element
-  function extractTweetMetrics(tweetArticle) {
-    // 1. Tweet ID & Author
-    const statusLinks = tweetArticle.querySelectorAll('a[href*="/status/"]');
+  // Reliably locate the bottom tweet action bar (avoiding media player controls)
+  function findTweetActionGroup(tweetArticle) {
+    // 1. Anchor from known interaction buttons (reply, like, retweet, bookmark, analytics)
+    const anchorBtn = tweetArticle.querySelector(
+      'button[data-testid="reply"], button[data-testid="like"], button[data-testid="retweet"], a[href*="/analytics"], button[data-testid="bookmark"]'
+    );
+    if (anchorBtn) {
+      const group = anchorBtn.closest('div[role="group"]');
+      if (group) return group;
+    }
+
+    // 2. Fallback: inspect all div[role="group"] elements from bottom up
+    const groups = tweetArticle.querySelectorAll('div[role="group"]');
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const g = groups[i];
+      const aria = (g.getAttribute('aria-label') || '').toLowerCase();
+      // Exclude audio/video controls
+      if (aria.includes('video') || aria.includes('audio') || aria.includes('media') || aria.includes('播放')) {
+        continue;
+      }
+      if (g.querySelector('svg, button')) {
+        return g;
+      }
+    }
+
+    return null;
+  }
+
+  // Extract tweet ID and author reliably, without confusing quoted tweets
+  function extractTweetIdentity(tweetArticle) {
     let tweetId = null;
     let author = "";
 
+    // 1. Time element link points specifically to the tweet itself
+    const timeEl = tweetArticle.querySelector('time');
+    if (timeEl) {
+      const link = timeEl.closest('a[href*="/status/"]');
+      if (link) {
+        const href = link.getAttribute('href') || '';
+        const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
+        if (match) {
+          author = match[1];
+          tweetId = match[2];
+          return { tweetId, author };
+        }
+      }
+    }
+
+    // 2. Check permalink URL if viewing single tweet status page
+    const pathMatch = window.location.pathname.match(/\/([^\/]+)\/status\/(\d+)/);
+    if (pathMatch) {
+      const isFocal = tweetArticle.querySelector('div[data-testid="tweetText"]') || tweetArticle.querySelector('h2');
+      if (isFocal) {
+        author = pathMatch[1];
+        tweetId = pathMatch[2];
+        return { tweetId, author };
+      }
+    }
+
+    // 3. Fallback: query status links outside of quoted tweet blocks
+    const statusLinks = tweetArticle.querySelectorAll('a[href*="/status/"]');
     for (const link of statusLinks) {
+      if (link.closest('div[role="link"]') && link.closest('div[role="link"]') !== tweetArticle) {
+        continue; // Skip quoted tweet cards
+      }
       const href = link.getAttribute('href') || '';
       const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
       if (match) {
@@ -137,34 +221,44 @@
       }
     }
 
-    if (!tweetId) return null;
+    return { tweetId, author };
+  }
+
+  // Extract metrics from single tweet element
+  function extractTweetMetrics(tweetArticle) {
+    // 1. Tweet ID & Author
+    const identity = extractTweetIdentity(tweetArticle);
+    if (!identity.tweetId) return null;
+
+    const { tweetId, author } = identity;
 
     // 2. Tweet Text snippet
     const textNode = tweetArticle.querySelector('div[data-testid="tweetText"]');
     const text = textNode ? textNode.textContent.trim().substring(0, 80) : "";
 
-    // 3. Extract Views
+    // 3. Action bar (strictly the tweet interaction toolbar)
+    const actionGroup = findTweetActionGroup(tweetArticle);
+    if (!actionGroup) return null;
+
+    // 4. Extract Views
     const analyticsLink = tweetArticle.querySelector('a[href*="/analytics"]');
     const views = extractElementCount(analyticsLink);
 
-    // 4. Extract Likes
+    // 5. Extract Likes
     const likeBtn = tweetArticle.querySelector('button[data-testid="like"], button[data-testid="unlike"]');
     const likes = extractElementCount(likeBtn);
 
-    // 5. Extract Retweets
+    // 6. Extract Retweets
     const rtBtn = tweetArticle.querySelector('button[data-testid="retweet"], button[data-testid="unretweet"]');
     const retweets = extractElementCount(rtBtn);
 
-    // 6. Extract Replies
+    // 7. Extract Replies
     const replyBtn = tweetArticle.querySelector('button[data-testid="reply"]');
     const replies = extractElementCount(replyBtn);
 
-    // 7. Extract Bookmarks
+    // 8. Extract Bookmarks
     const bookmarkBtn = tweetArticle.querySelector('button[data-testid="bookmark"], button[data-testid="removeBookmark"]');
     const bookmarks = extractElementCount(bookmarkBtn);
-
-    // 8. Action bar
-    const actionGroup = tweetArticle.querySelector('div[role="group"]');
 
     return {
       tweetId,
@@ -173,18 +267,6 @@
       metrics: { views, likes, retweets, replies, bookmarks },
       actionGroup
     };
-  }
-
-  function formatDeltaSummary(delta) {
-    const parts = [];
-    if (delta.likes > 0) parts.push(`+${delta.likes}赞`);
-    if (delta.retweets > 0) parts.push(`+${delta.retweets}转`);
-    if (delta.replies > 0) parts.push(`+${delta.replies}评`);
-    if (delta.bookmarks > 0) parts.push(`+${delta.bookmarks}藏`);
-    if (delta.views > 0) parts.push(`+${delta.views}阅`);
-
-    if (parts.length === 0) return "0";
-    return parts.join(" ");
   }
 
   function formatElapsedTime(ms) {
@@ -198,6 +280,9 @@
   // Main scanning routine
   async function processAllVisibleTweets() {
     if (isScanning) return;
+    if (!isExtensionValid()) {
+      return;
+    }
     isScanning = true;
 
     try {
@@ -209,11 +294,6 @@
 
       // Check current user's handle
       const detected = detectMyHandle();
-      if (detected && detected !== myHandle) {
-        myHandle = detected;
-        await chrome.storage.local.set({ my_user_handle: detected });
-        console.log(`[X-Heat-Pulse] Logged in account identified: @${detected}`);
-      }
 
       // Fetch stored tweet records and config
       const storage = await chrome.storage.local.get(["tweet_records", "config", "my_user_handle"]);
@@ -221,10 +301,18 @@
       const config = storage.config || { intervalMinutes: DEFAULT_INTERVAL_MINUTES };
       const intervalMinutes = config.intervalMinutes || DEFAULT_INTERVAL_MINUTES;
       const targetIntervalMs = intervalMinutes * 60 * 1000;
-      const savedHandle = storage.my_user_handle || myHandle || "";
+      let savedHandle = (storage.my_user_handle || config.myHandle || myHandle || "").trim();
       const now = Date.now();
 
       let hasNewRecords = false;
+
+      if (detected && detected.toLowerCase() !== savedHandle.toLowerCase()) {
+        savedHandle = detected;
+        myHandle = detected;
+        await chrome.storage.local.set({ my_user_handle: detected });
+        console.log(`[X-Heat-Pulse] Logged-in creator account identified: @${detected}`);
+        hasNewRecords = true;
+      }
 
       tweetArticles.forEach((article) => {
         const data = extractTweetMetrics(article);
@@ -256,6 +344,9 @@
         const record = tweetRecords[tweetId];
         record.lastSeen = now;
         if (text && !record.text) record.text = text;
+        if (author && !record.author) record.author = author;
+
+        // If author matches user handle, tag as own post
         if (isOwn && !record.isOwnTweet) {
           record.isOwnTweet = true;
           hasNewRecords = true;
@@ -296,9 +387,9 @@
       });
 
       // Persist to local storage
-      if (hasNewRecords) {
+      if (hasNewRecords && isExtensionValid()) {
         const tweetKeys = Object.keys(tweetRecords);
-        if (tweetKeys.length > 300) {
+        if (tweetKeys.length > 350) {
           // Prioritize keeping user's own tweets
           tweetKeys.sort((a, b) => {
             if (tweetRecords[b].isOwnTweet && !tweetRecords[a].isOwnTweet) return 1;
@@ -306,13 +397,17 @@
             return (tweetRecords[b].lastSeen || 0) - (tweetRecords[a].lastSeen || 0);
           });
           const trimmed = {};
-          tweetKeys.slice(0, 300).forEach(k => { trimmed[k] = tweetRecords[k]; });
+          tweetKeys.slice(0, 350).forEach(k => { trimmed[k] = tweetRecords[k]; });
           await chrome.storage.local.set({ tweet_records: trimmed });
         } else {
           await chrome.storage.local.set({ tweet_records: tweetRecords });
         }
       }
     } catch (err) {
+      if (err.message && err.message.includes('Extension context invalidated')) {
+        // Quietly stop on reload
+        return;
+      }
       console.warn('[X-Heat-Pulse] Error during tweet scan:', err);
     } finally {
       isScanning = false;
@@ -436,7 +531,7 @@
         const rect = container.getBoundingClientRect();
         const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
         if (tooltipEl) {
-          if (rect.top < 230) {
+          if (rect.top < 240) {
             tooltipEl.classList.add('flipped');
           } else {
             tooltipEl.classList.remove('flipped');
@@ -472,12 +567,12 @@
         return `<span class="x-val-zero">+0</span>`;
       };
 
-      const ownTag = info.isOwnTweet ? `<span style="font-size:9.5px; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:1px 5px; border-radius:4px; margin-left:6px;">我的帖子</span>` : '';
+      const ownTag = info.isOwnTweet ? `<span style="font-size:9.5px; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:1px 5px; border-radius:4px; margin-left:6px;">我的专属帖子</span>` : '';
 
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
           <span>📊 X 帖子热度时序追踪 ${ownTag}</span>
-          <span style="font-size:10px; color:#64748b;">已持续追踪 ${info.totalAgeStr}</span>
+          <span style="font-size:10px; color:#64748b;">持续追踪 ${info.totalAgeStr}</span>
         </div>
         <table class="x-heat-pulse-tooltip-table">
           <thead>
@@ -543,6 +638,7 @@
   }
 
   async function resetTweetBaseline(tweetId, currentMetrics) {
+    if (!isExtensionValid()) return;
     const storage = await chrome.storage.local.get("tweet_records");
     const tweetRecords = storage.tweet_records || {};
     if (tweetRecords[tweetId]) {
@@ -551,11 +647,28 @@
       tweetRecords[tweetId].firstSeenMetrics = { ...currentMetrics };
       tweetRecords[tweetId].snapshots = [{ t: now, ...currentMetrics }];
       await chrome.storage.local.set({ tweet_records: tweetRecords });
-      console.log(`[X-Heat-Pulse] Tweet ${tweetId} baseline reset to now.`);
+      console.log(`[X-Heat-Pulse] Tweet ${tweetId} baseline reset.`);
       scheduleScan();
     }
   }
 
+  // Listen for message triggers from popup or background
+  if (isExtensionValid()) {
+    chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      if (request.action === "RESCAN") {
+        scheduleScan();
+        sendResponse({ status: "scanning" });
+      } else if (request.action === "SET_HANDLE") {
+        if (request.handle) {
+          myHandle = request.handle;
+          scheduleScan();
+          sendResponse({ status: "handle_updated" });
+        }
+      }
+    });
+  }
+
+  // DOM Mutation Observer for infinite scroll
   const observer = new MutationObserver((mutations) => {
     let hasRelevantMutation = false;
     for (const m of mutations) {
@@ -575,6 +688,6 @@
   });
 
   scheduleScan();
-  setInterval(scheduleScan, 6000);
+  setInterval(scheduleScan, 5000);
 
 })();

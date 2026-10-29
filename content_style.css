@@ -12,6 +12,8 @@
   cursor: pointer;
   user-select: none;
   vertical-align: middle;
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 /* 1. Pill Badge - Frosted Glass & Precision Borders */
