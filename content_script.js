@@ -803,6 +803,7 @@
   let activePortalTweetId = null;
   let activePortalContainer = null;
   let activePortalMetrics = null;
+  let isPortalPinned = false;
   let portalHideTimer = null;
 
   function getOrCreatePortal() {
@@ -822,7 +823,9 @@
       });
 
       portal.addEventListener('mouseleave', () => {
-        scheduleHidePortal(180);
+        if (!isPortalPinned) {
+          scheduleHidePortal(220);
+        }
       });
 
       // Prevent clicks inside portal from propagating to background tweet / links
@@ -833,9 +836,11 @@
     return portal;
   }
 
-  function scheduleHidePortal(delay = 180) {
+  function scheduleHidePortal(delay = 200) {
+    if (isPortalPinned) return;
     if (portalHideTimer) clearTimeout(portalHideTimer);
     portalHideTimer = setTimeout(() => {
+      if (isPortalPinned) return;
       const portal = document.getElementById('x-heat-pulse-portal');
       if (portal) {
         portal.style.display = 'none';
@@ -843,11 +848,13 @@
         activePortalTweetId = null;
         activePortalContainer = null;
         activePortalMetrics = null;
+        isPortalPinned = false;
       }
     }, delay);
   }
 
   function hidePortalImmediate() {
+    isPortalPinned = false;
     if (portalHideTimer) {
       clearTimeout(portalHideTimer);
       portalHideTimer = null;
@@ -1064,11 +1071,14 @@
   }
 
   function showPortalForTweet(container, tweetId, info, record) {
+    const portal = getOrCreatePortal();
+    // Only re-render content if switching to a different tweet or portal is closed
+    if (activePortalTweetId !== tweetId || portal.style.display === 'none') {
+      renderPortalContent(portal, tweetId, info, record);
+    }
     activePortalTweetId = tweetId;
     activePortalContainer = container;
 
-    const portal = getOrCreatePortal();
-    renderPortalContent(portal, tweetId, info, record);
     portal.style.display = 'block';
     portal.classList.add('visible');
     positionPortal(container);
@@ -1130,9 +1140,20 @@
         </div>
       `;
 
-      // Prevent tweet card click navigation when interacting with badge
+      // Click toggles pinned open state (点开即锁定展开，再次点击或点击外部关闭)
       container.addEventListener('click', (e) => {
         e.stopPropagation();
+        const portal = getOrCreatePortal();
+        if (activePortalTweetId === tweetId && portal.style.display === 'block') {
+          if (isPortalPinned) {
+            hidePortalImmediate();
+          } else {
+            isPortalPinned = true;
+          }
+        } else {
+          isPortalPinned = true;
+          showPortalForTweet(container, tweetId, info, record);
+        }
       });
 
       container.addEventListener('mouseenter', () => {
@@ -1140,11 +1161,17 @@
           clearTimeout(portalHideTimer);
           portalHideTimer = null;
         }
+        const portal = document.getElementById('x-heat-pulse-portal');
+        if (activePortalTweetId === tweetId && portal && portal.style.display === 'block') {
+          return; // Already open for this tweet, avoid redundant re-render flicker
+        }
         showPortalForTweet(container, tweetId, info, record);
       });
 
       container.addEventListener('mouseleave', () => {
-        scheduleHidePortal(180);
+        if (!isPortalPinned) {
+          scheduleHidePortal(220);
+        }
       });
 
       if (mount.beforeElement && mount.beforeElement.parentElement === mount.parent) {
@@ -1165,11 +1192,13 @@
       subSpan.textContent = info.subText;
     }
 
-    // If portal is currently showing for this tweet, update live values in real time
-    if (activePortalTweetId === tweetId) {
-      const portal = document.getElementById('x-heat-pulse-portal');
-      if (portal && portal.style.display !== 'none') {
-        renderPortalContent(portal, tweetId, info, record);
+    // If portal is currently showing for this tweet, ONLY update if metrics actually changed!
+    if (activePortalTweetId === tweetId && activePortalMetrics) {
+      if (metricsChanged(activePortalMetrics, info.curr)) {
+        const portal = document.getElementById('x-heat-pulse-portal');
+        if (portal && portal.style.display !== 'none') {
+          renderPortalContent(portal, tweetId, info, record);
+        }
       }
     }
   }
@@ -1214,9 +1243,29 @@
     }
     let hasRelevantMutation = false;
     for (const m of mutations) {
+      // Ignore mutations originating from inside our own portal or badge containers
+      if (m.target && (
+        m.target.id === 'x-heat-pulse-portal' ||
+        m.target.closest?.('#x-heat-pulse-portal') ||
+        m.target.closest?.('.x-heat-pulse-badge-container')
+      )) {
+        continue;
+      }
       if (m.addedNodes.length > 0) {
-        hasRelevantMutation = true;
-        break;
+        let isOurNode = false;
+        for (const n of m.addedNodes) {
+          if (n.nodeType === 1 && (
+            n.id === 'x-heat-pulse-portal' ||
+            n.classList?.contains('x-heat-pulse-badge-container')
+          )) {
+            isOurNode = true;
+            break;
+          }
+        }
+        if (!isOurNode) {
+          hasRelevantMutation = true;
+          break;
+        }
       }
     }
     if (hasRelevantMutation) {

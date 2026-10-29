@@ -159,12 +159,6 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
 #x-heat-pulse-portal.visible,
 .x-heat-pulse-portal.visible {
   display: block !important;
-  animation: xPortalFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes xPortalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
 }
 
 #x-heat-pulse-portal::-webkit-scrollbar,
@@ -185,22 +179,22 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
   background: #9ca3af;
 }
 
-/* Invisible hover bridge to prevent flickering when cursor moves between badge and portal */
+/* Hover bridge matching the exact 8px gap between badge and portal */
 #x-heat-pulse-portal::before,
 .x-heat-pulse-portal::before {
   content: "";
   position: absolute;
-  top: -12px;
+  top: -8px;
   left: 0;
   right: 0;
-  height: 12px;
+  height: 8px;
   background: transparent;
 }
 #x-heat-pulse-portal.flipped::before,
 .x-heat-pulse-portal.flipped::before {
   top: auto;
-  bottom: -12px;
-  height: 12px;
+  bottom: -8px;
+  height: 8px;
 }
 
 .x-heat-pulse-tooltip-header {
