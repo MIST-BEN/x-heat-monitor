@@ -1,5 +1,5 @@
 /**
- * X Heat Pulse - Background Service Worker (v1.4.2)
+ * X Heat Pulse - Background Service Worker (v1.6.0)
  * Network-grade metric collection, rate limiting, and differential analysis.
  * Exclusively monitors and aggregates the creator's own posts for the toolbar badge.
  */

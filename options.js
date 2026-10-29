@@ -1,5 +1,5 @@
 /**
- * X Heat Pulse - Options Page Controller (v1.4.2)
+ * X Heat Pulse - Options Page Controller (v1.6.0)
  */
 
 document.addEventListener("DOMContentLoaded", async () => {

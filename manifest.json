@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "X Heat Pulse - 帖子热度差分监测器",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "面向创作者的 X (Twitter) 专属推文热度差分与推流监测插件。支持实时时增均速(浏览/发布时间)、推流爆发监测与双轨增量留存。",
   "icons": {
     "16": "icons/icon16.png",

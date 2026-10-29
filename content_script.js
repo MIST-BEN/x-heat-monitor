@@ -21,7 +21,7 @@
   }
   window.__X_HEAT_PULSE_LOADED__ = true;
 
-  console.log('[X-Heat-Pulse] v1.5.1 Content script initialized.');
+  console.log('[X-Heat-Pulse] v1.6.0 Content script initialized.');
 
   const DEFAULT_INTERVAL_MINUTES = 10;
   let isScanning = false;

@@ -6,20 +6,21 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 360px;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: radial-gradient(circle at 50% 0%, #0f1c3f 0%, #060911 75%);
-      color: #f8fafc;
-      padding: 15px;
+      width: 380px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f8fafc;
+      color: #111827;
+      padding: 14px;
       user-select: none;
       letter-spacing: -0.01em;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Custom Scrollbar */
+    /* Scrollbars */
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
     /* Header */
     .header {
@@ -27,7 +28,7 @@
       justify-content: space-between;
       align-items: center;
       padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid #e5e7eb;
       margin-bottom: 12px;
     }
     .brand {
@@ -36,172 +37,206 @@
       gap: 7px;
       font-weight: 700;
       font-size: 14.5px;
-      color: #38bdf8;
+      color: #111827;
       letter-spacing: -0.02em;
     }
     .brand svg {
-      width: 18px;
-      height: 18px;
-      fill: #38bdf8;
-      filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.5));
+      width: 17px;
+      height: 17px;
+      fill: #0f1419;
     }
     .header-actions {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
     }
     .tag {
-      font-size: 10px;
+      font-size: 10.5px;
       font-weight: 600;
-      padding: 2px 7px;
+      padding: 2.5px 8px;
       border-radius: 9999px;
-      background: rgba(30, 41, 59, 0.6);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      color: #94a3b8;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
     .tag.live {
-      background: rgba(16, 185, 129, 0.14);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.35);
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+    .tag-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
     }
     .btn-icon {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: #94a3b8;
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
       cursor: pointer;
       display: flex;
       align-items: center;
       padding: 5px;
       border-radius: 6px;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.15s ease;
     }
     .btn-icon:hover {
-      color: #f8fafc;
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-      transform: translateY(-0.5px);
+      color: #111827;
+      background: #f9fafb;
+      border-color: #d1d5db;
     }
     .spinning {
       animation: spin 0.75s linear infinite;
     }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
-    /* Main Delta Card */
+    /* Hero Card (Pure White Linear Style) */
     .hero-card {
-      background: linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
-      border: 1px solid rgba(56, 189, 248, 0.2);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 12px;
-      padding: 14px;
-      margin-bottom: 12px;
-      box-shadow: 0 10px 24px -4px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+      padding: 13px 14px 10px 14px;
+      margin-bottom: 11px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-    .hero-label {
-      font-size: 11px;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      font-weight: 600;
+    .hero-header-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      margin-bottom: 8px;
+    }
+    .hero-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #374151;
+      letter-spacing: -0.01em;
     }
     .account-selector {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      background: rgba(56, 189, 248, 0.12);
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      gap: 4.5px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
       border-radius: 9999px;
       padding: 2px 8px;
-      color: #38bdf8;
+      color: #1f2937;
       cursor: pointer;
       font-size: 11px;
       font-weight: 600;
-      transition: all 0.2s ease;
-      text-transform: none;
+      transition: all 0.15s ease;
     }
     .account-selector:hover {
-      background: rgba(56, 189, 248, 0.22);
-      border-color: #38bdf8;
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+      background: #e5e7eb;
+      border-color: #d1d5db;
     }
     .account-dot {
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background: #10b981;
-      box-shadow: 0 0 6px #10b981;
+      background: #15803d;
     }
-    .hero-val-container {
+
+    /* 3-Pillar Velocity & Surge Meter */
+    .x-velocity-meter-card {
       display: flex;
-      align-items: center;
+      align-items: stretch;
       justify-content: space-between;
-      margin-top: 8px;
-      gap: 6px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 9px 12px;
+      margin-top: 6px;
+      margin-bottom: 8px;
     }
-    .hero-stat-block {
+    .x-meter-col {
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      justify-content: center;
+      flex: 1;
     }
-    .hero-val-total {
-      font-size: 24px;
-      font-weight: 800;
-      color: #38bdf8;
-      font-feature-settings: "tnum";
-      line-height: 1.1;
-      text-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+    .x-meter-label {
+      font-size: 10.5px;
+      font-weight: 500;
+      color: #6b7280;
+      letter-spacing: 0.01em;
+      line-height: 1.2;
+      margin-bottom: 3px;
     }
-    .hero-val {
-      font-size: 21px;
-      font-weight: 800;
-      color: #34d399;
-      font-feature-settings: "tnum";
-      line-height: 1.1;
+    .x-meter-number-row {
+      display: flex;
+      align-items: baseline;
+      gap: 2.5px;
     }
-    .hero-val-tot {
-      font-size: 21px;
-      font-weight: 800;
-      color: #7dd3fc;
-      font-feature-settings: "tnum";
-      line-height: 1.1;
+    .x-meter-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: #111827;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
     }
-    .hero-val-speed {
-      font-size: 20px;
-      font-weight: 800;
-      color: #fbbf24;
-      font-feature-settings: "tnum";
-      line-height: 1.1;
-      text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+    .x-meter-value.text-positive {
+      color: #15803d !important;
     }
-    .hero-stat-divider {
-      width: 1px;
-      height: 26px;
-      background: rgba(255, 255, 255, 0.12);
+    .x-meter-unit {
+      font-size: 11px;
+      color: #6b7280;
+      font-weight: 500;
     }
-    .hero-unit {
+    .x-meter-subtext {
       font-size: 9.5px;
-      color: #64748b;
+      color: #9ca3af;
       font-weight: 500;
       margin-top: 2px;
+      white-space: nowrap;
     }
-    .hero-burst {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 999px;
-      background: rgba(56, 189, 248, 0.14);
-      color: #38bdf8;
+    .x-meter-divider {
+      width: 1px;
+      background: #e5e7eb;
+      margin: 2px 8px;
+    }
+
+    /* Push Momentum Status Pill */
+    .x-push-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #15803d;
+      padding: 1.5px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
       font-weight: 600;
-      border: 1px solid rgba(56, 189, 248, 0.25);
+      letter-spacing: -0.01em;
+      line-height: 1.3;
+      width: fit-content;
+    }
+    .x-push-status-badge.hot {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #dc2626;
+    }
+    .x-push-status-badge.steady {
+      background: #f3f4f6;
+      border-color: #e5e7eb;
+      color: #4b5563;
+    }
+    .x-status-pulse-dot {
+      width: 4.5px;
+      height: 4.5px;
+      border-radius: 50%;
+      background: currentColor;
     }
 
     /* Sparkline Chart */
     .sparkline-container {
-      margin-top: 10px;
+      margin-top: 6px;
       width: 100%;
-      height: 40px;
+      height: 34px;
     }
     svg.sparkline {
       width: 100%;
@@ -210,129 +245,215 @@
     }
     .sparkline-path {
       fill: none;
-      stroke: #38bdf8;
-      stroke-width: 2.2;
+      stroke: #0284c7;
+      stroke-width: 1.8;
       stroke-linecap: round;
-      filter: drop-shadow(0 2px 4px rgba(56, 189, 248, 0.4));
+      stroke-linejoin: round;
     }
     .sparkline-area {
       fill: url(#chart-gradient);
     }
 
-    /* Metric Grid */
-    .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      margin-bottom: 12px;
+    /* Metric Breakdown Table Container */
+    .table-card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 6px 12px;
+      margin-bottom: 11px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
     }
-    .metric-item {
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 8px;
-      padding: 7px 6px;
-      text-align: center;
-      transition: all 0.2s;
+    .x-heat-pulse-tooltip-table {
+      width: 100%;
+      border-collapse: collapse;
     }
-    .metric-item:hover {
-      background: rgba(30, 41, 59, 0.6);
-      border-color: rgba(255, 255, 255, 0.12);
-    }
-    .metric-item .title {
-      font-size: 9.5px;
-      color: #64748b;
-      margin-bottom: 2px;
+    .x-heat-pulse-tooltip-table th {
+      color: #6b7280;
       font-weight: 500;
+      font-size: 10.5px;
+      padding: 5px 2px;
+      border-bottom: 1px solid #f3f4f6;
+      letter-spacing: 0.01em;
     }
-    .metric-item .delta {
-      font-size: 14px;
-      font-weight: 700;
-      color: #34d399;
-      font-feature-settings: "tnum";
+    .x-heat-pulse-tooltip-table th.col-left {
+      text-align: left;
+      padding-left: 0;
+    }
+    .x-heat-pulse-tooltip-table th.col-right {
+      text-align: right;
+    }
+    .x-heat-pulse-tooltip-table td {
+      padding: 6px 2px;
+      font-size: 12px;
+      border-bottom: 1px solid #f3f4f6;
+      font-variant-numeric: tabular-nums;
+      vertical-align: middle;
+    }
+    .x-heat-pulse-tooltip-table tr:last-child td {
+      border-bottom: none;
+    }
+    .metric-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: #1f2937;
+      font-weight: 500;
+      font-size: 12px;
+    }
+    .metric-icon {
+      width: 13.5px;
+      height: 13.5px;
+      stroke: #4b5563;
+      stroke-width: 1.7;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
+      flex-shrink: 0;
+    }
+    .val-highlight {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 11.5px;
+    }
+    .val-zero {
+      color: #9ca3af;
+      font-weight: 400;
+      font-size: 11.5px;
+    }
+    .val-total {
+      color: #111827;
+      font-weight: 600;
+      font-size: 12px;
     }
 
-    /* Top Posts */
+    /* Segmented Control Tabs */
     .filter-tabs {
       display: flex;
-      gap: 6px;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 3px;
+      gap: 3px;
       margin-bottom: 10px;
     }
     .filter-tab {
       flex: 1;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      color: #94a3b8;
-      padding: 6px 10px;
-      border-radius: 7px;
-      font-size: 11px;
-      font-weight: 600;
+      background: transparent;
+      border: none;
+      color: #64748b;
+      padding: 5.5px 8px;
+      border-radius: 6px;
+      font-size: 11.5px;
+      font-weight: 500;
       cursor: pointer;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.15s ease;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 4px;
     }
     .filter-tab:hover {
-      background: rgba(255, 255, 255, 0.08);
-      color: #f8fafc;
+      color: #111827;
     }
     .filter-tab.active {
-      background: rgba(56, 189, 248, 0.16);
-      border-color: rgba(56, 189, 248, 0.4);
-      color: #38bdf8;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+      background: #ffffff;
+      color: #0f172a;
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
+
+    /* Section Title */
     .section-title {
       font-size: 10.5px;
-      color: #64748b;
-      margin-bottom: 7px;
+      color: #6b7280;
+      margin-bottom: 6px;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.04em;
       font-weight: 600;
       display: flex;
       justify-content: space-between;
     }
+
+    /* Posts List */
     .posts-list {
-      max-height: 140px;
+      max-height: 145px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      margin-bottom: 12px;
+      gap: 5px;
+      margin-bottom: 11px;
     }
     .post-card {
-      background: rgba(15, 23, 42, 0.7);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 8px;
-      padding: 9px 10px;
+      padding: 8px 10px;
       font-size: 11px;
       line-height: 1.4;
-      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: all 0.15s ease;
     }
     .post-card:hover {
-      background: rgba(30, 41, 59, 0.8);
-      border-color: rgba(56, 189, 248, 0.25);
-      transform: translateY(-0.5px);
+      border-color: #cbd5e1;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.03);
     }
     .post-text {
-      color: #e2e8f0;
+      color: #111827;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
       font-weight: 500;
+      font-size: 11.5px;
     }
     .post-stats {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      color: #64748b;
+      color: #6b7280;
       font-size: 10px;
     }
-    .post-delta {
+    .post-stats-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .post-speed-pill {
+      color: #d97706;
       font-weight: 600;
-      font-feature-settings: "tnum";
+      background: #fffbeb;
+      border: 1px solid #fef3c7;
+      padding: 0.5px 4.5px;
+      border-radius: 4px;
+    }
+    .post-stats-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-variant-numeric: tabular-nums;
+    }
+    .post-delta-badge {
+      font-weight: 600;
+      color: #6b7280;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      padding: 0.5px 5px;
+      border-radius: 4px;
+    }
+    .post-delta-badge.positive {
+      color: #15803d;
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+    .post-delta-tot {
+      color: #4b5563;
+      font-weight: 500;
     }
 
     /* Footer */
@@ -340,20 +461,20 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
-      color: #475569;
+      font-size: 10.5px;
+      color: #6b7280;
       padding-top: 10px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      border-top: 1px solid #e5e7eb;
     }
     .footer a {
-      color: #38bdf8;
+      color: #2563eb;
       text-decoration: none;
       cursor: pointer;
       font-weight: 500;
       transition: color 0.15s;
     }
     .footer a:hover {
-      color: #7dd3fc;
+      text-decoration: underline;
     }
 
     /* Account Modal */
@@ -361,9 +482,9 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.78);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      background: rgba(15, 23, 42, 0.45);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       z-index: 99999;
       align-items: center;
       justify-content: center;
@@ -373,49 +494,52 @@
       display: flex;
     }
     .modal-card {
-      background: #090e18;
-      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
       border-radius: 12px;
-      padding: 16px;
+      padding: 18px;
       width: 100%;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
     }
     .modal-title {
-      font-size: 13px;
+      font-size: 13.5px;
       font-weight: 700;
-      color: #f8fafc;
+      color: #111827;
       margin-bottom: 6px;
     }
     .modal-desc {
-      font-size: 11px;
-      color: #94a3b8;
+      font-size: 11.5px;
+      color: #6b7280;
       line-height: 1.5;
       margin-bottom: 12px;
     }
     .modal-input-group {
       display: flex;
       align-items: center;
-      background: #0f172a;
-      border: 1px solid #334155;
+      background: #f9fafb;
+      border: 1px solid #d1d5db;
       border-radius: 6px;
       padding: 0 10px;
       margin-bottom: 14px;
+      transition: all 0.15s ease;
     }
     .modal-input-group:focus-within {
-      border-color: #38bdf8;
-      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+      border-color: #111827;
+      background: #ffffff;
+      box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.08);
     }
     .modal-prefix {
-      color: #64748b;
+      color: #9ca3af;
       font-weight: 600;
       font-size: 13px;
     }
     #modal-handle-input {
       background: transparent;
       border: none;
-      color: #f8fafc;
+      color: #111827;
       padding: 8px 6px;
       font-size: 13px;
+      font-weight: 500;
       outline: none;
       width: 100%;
     }
@@ -425,26 +549,32 @@
       gap: 8px;
     }
     .btn-modal-cancel {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: #94a3b8;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
       border-radius: 6px;
       padding: 6px 12px;
-      font-size: 11px;
+      font-size: 11.5px;
+      font-weight: 500;
       cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .btn-modal-cancel:hover {
+      background: #e5e7eb;
     }
     .btn-modal-save {
-      background: #0284c7;
-      border: none;
+      background: #0f172a;
+      border: 1px solid #0f172a;
       color: #ffffff;
       border-radius: 6px;
       padding: 6px 14px;
-      font-size: 11px;
+      font-size: 11.5px;
       font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s ease;
     }
     .btn-modal-save:hover {
-      background: #0369a1;
+      background: #1e293b;
     }
   </style>
 </head>
@@ -456,7 +586,10 @@
       <span>X Heat Pulse</span>
     </div>
     <div class="header-actions">
-      <span class="tag live" id="status-tag">3m 实时监控中</span>
+      <span class="tag live" id="status-tag">
+        <span class="tag-dot"></span>
+        <span id="status-tag-text">10m 实时监控中</span>
+      </span>
       <button class="btn-icon" id="btn-refresh" title="立即采样 (强制刷新)">
         <svg id="icon-refresh" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
       </button>
@@ -466,46 +599,60 @@
     </div>
   </div>
 
-  <!-- Hero Delta Card -->
+  <!-- Hero Card: 3-Pillar Velocity & Surge Meter -->
   <div class="hero-card">
-    <div class="hero-label">
-      <span id="label-delta-title">我的帖子实时热度</span>
+    <div class="hero-header-row">
+      <span class="hero-title" id="label-delta-title">我的帖子实时热度</span>
       <div class="account-selector" id="account-btn" title="点击切换或修改监控账号">
         <span class="account-dot"></span>
         <span id="account-name">@sben96001</span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
       </div>
     </div>
-    <div class="hero-val-container">
-      <div class="hero-stat-block">
-        <span class="hero-val-total" id="total-views">0</span>
-        <span class="hero-unit">当前总浏览</span>
+
+    <!-- 3-Pillar Velocity & Surge Meter (与页内卡片 100% 配套) -->
+    <div class="x-velocity-meter-card">
+      <!-- 1. 全帖累计均速 -->
+      <div class="x-meter-col">
+        <div class="x-meter-label">全帖累计均速</div>
+        <div class="x-meter-number-row">
+          <span class="x-meter-value" id="total-hourly-rate">0/h</span>
+        </div>
+        <div class="x-meter-subtext">总曝光 <span id="total-views">0</span> 阅</div>
       </div>
-      <div class="hero-stat-divider"></div>
-      <div class="hero-stat-block">
-        <span class="hero-val-speed" id="total-hourly-rate">0/h</span>
-        <span class="hero-unit">时均增速</span>
+
+      <div class="x-meter-divider"></div>
+
+      <!-- 2. 眼下起量 (近10分) -->
+      <div class="x-meter-col">
+        <div class="x-meter-label">眼下起量 (近<span id="d-interval">10</span>分)</div>
+        <div class="x-meter-number-row">
+          <span class="x-meter-value text-positive" id="delta-heat">+0</span>
+          <span class="x-meter-unit" id="label-delta-unit">阅</span>
+        </div>
+        <div class="x-meter-subtext">折算时速 ~<span id="burst-hourly-rate">0</span> 阅/h</div>
       </div>
-      <div class="hero-stat-divider"></div>
-      <div class="hero-stat-block">
-        <span class="hero-val" id="delta-heat">+0</span>
-        <span class="hero-unit" id="label-delta-unit">近3m增量</span>
+
+      <div class="x-meter-divider"></div>
+
+      <!-- 3. 当前推流态势 -->
+      <div class="x-meter-col">
+        <div class="x-meter-label">当前推流态势</div>
+        <div class="x-push-status-badge steady" id="delta-rate">
+          <span class="x-status-pulse-dot"></span>
+          <span>☕ 平稳推流</span>
+        </div>
+        <div class="x-meter-subtext">监控累计 <span id="delta-total">+0</span></div>
       </div>
-      <div class="hero-stat-divider"></div>
-      <div class="hero-stat-block">
-        <span class="hero-val-tot" id="delta-total">+0</span>
-        <span class="hero-unit">监控累计</span>
-      </div>
-      <span class="hero-burst" id="delta-rate">平稳</span>
     </div>
 
-    <!-- Sparkline -->
+    <!-- Sparkline Chart -->
     <div class="sparkline-container">
-      <svg class="sparkline" id="sparkline-svg" viewBox="0 0 320 40">
+      <svg class="sparkline" id="sparkline-svg" viewBox="0 0 350 34">
         <defs>
           <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.35"/>
-            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+            <stop offset="0%" stop-color="#0284c7" stop-opacity="0.16"/>
+            <stop offset="100%" stop-color="#0284c7" stop-opacity="0.0"/>
           </linearGradient>
         </defs>
         <path class="sparkline-area" id="sparkline-area" d=""/>
@@ -514,35 +661,74 @@
     </div>
   </div>
 
-  <!-- 5-Metric Breakdown Grid -->
-  <div class="metric-grid">
-    <div class="metric-item">
-      <div class="title">赞 (Likes)</div>
-      <div class="delta" id="d-likes">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
-    </div>
-    <div class="metric-item">
-      <div class="title">转 (Retweets)</div>
-      <div class="delta" id="d-rts">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
-    </div>
-    <div class="metric-item">
-      <div class="title">评 (Replies)</div>
-      <div class="delta" id="d-replies">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
-    </div>
-    <div class="metric-item">
-      <div class="title">藏 (Bookmarks)</div>
-      <div class="delta" id="d-bookmarks">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
-    </div>
-    <div class="metric-item">
-      <div class="title">阅 (Views)</div>
-      <div class="delta" id="d-views" style="color:#38bdf8;">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
-    </div>
-    <div class="metric-item">
-      <div class="title">时均增速 (Views/h)</div>
-      <div class="delta" style="color:#fbbf24; font-size:13px;" id="d-speed">0/h</div>
-    </div>
+  <!-- Metric Breakdown Table (与页内卡片指标表格 100% 配套) -->
+  <div class="table-card">
+    <table class="x-heat-pulse-tooltip-table">
+      <thead>
+        <tr>
+          <th class="col-left">互动指标</th>
+          <th class="col-right">近<span id="tb-interval">10</span>分钟增量</th>
+          <th class="col-right">当前总量</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="metric-name-wrap">
+              <svg class="metric-icon" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span>曝光浏览</span>
+            </div>
+          </td>
+          <td class="col-right" id="d-views"><span class="val-zero">+0</span></td>
+          <td class="col-right val-total" id="tot-views">0</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="metric-name-wrap">
+              <svg class="metric-icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+              <span>获得点赞</span>
+            </div>
+          </td>
+          <td class="col-right" id="d-likes"><span class="val-zero">+0</span></td>
+          <td class="col-right val-total" id="tot-likes">0</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="metric-name-wrap">
+              <svg class="metric-icon" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="m7 23-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+              <span>转发推文</span>
+            </div>
+          </td>
+          <td class="col-right" id="d-rts"><span class="val-zero">+0</span></td>
+          <td class="col-right val-total" id="tot-rts">0</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="metric-name-wrap">
+              <svg class="metric-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+              <span>参与回复</span>
+            </div>
+          </td>
+          <td class="col-right" id="d-replies"><span class="val-zero">+0</span></td>
+          <td class="col-right val-total" id="tot-replies">0</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="metric-name-wrap">
+              <svg class="metric-icon" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+              <span>加入书签</span>
+            </div>
+          </td>
+          <td class="col-right" id="d-bookmarks"><span class="val-zero">+0</span></td>
+          <td class="col-right val-total" id="tot-bookmarks">0</td>
+        </tr>
+      </tbody>
+    </table>
+    <!-- Hidden legacy placeholder to prevent any possible JS null reference -->
+    <span id="d-speed" style="display:none;"></span>
   </div>
 
-  <!-- Scope Filter Tabs -->
+  <!-- Scope Filter Tabs (Segmented Control) -->
   <div class="filter-tabs">
     <button class="filter-tab active" id="tab-own">👤 我的专属帖子</button>
     <button class="filter-tab" id="tab-all">🌐 发现信息流</button>
@@ -550,11 +736,11 @@
 
   <!-- Top Monitored Posts -->
   <div class="section-title">
-    <span id="posts-list-title">我的活跃帖子</span>
-    <span id="monitored-count">监控中: 0</span>
+    <span id="posts-list-title">我的专属帖子</span>
+    <span id="monitored-count">我的帖子: 0 条</span>
   </div>
   <div class="posts-list" id="posts-container">
-    <div style="color:#64748b; text-align:center; padding: 22px 0;">正在捕获页面推文...</div>
+    <div style="color:#9ca3af; text-align:center; padding: 22px 0; font-size:11.5px;">正在捕获页面推文...</div>
   </div>
 
   <!-- Footer -->

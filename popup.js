@@ -1,5 +1,6 @@
 /**
- * X Heat Pulse - Popup Logic & Visualization (v1.4.2)
+ * X Heat Pulse - Popup Logic & Visualization (v1.5.1)
+ * Linear / Stripe minimalist white SaaS design language matching the in-page portal.
  * Aggregates real in-page recorded tweet data from x.com
  * Supports strictly filtering and monitoring the user's OWN tweets.
  * Pre-binds @sben96001 by default with interactive 1-click handle modification.
@@ -27,7 +28,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentTab = "own";
       tabOwn.classList.add("active");
       tabAll.classList.remove("active");
-      document.getElementById("posts-list-title").textContent = "我的专属帖子";
+      const titleEl = document.getElementById("posts-list-title");
+      if (titleEl) titleEl.textContent = "我的专属帖子";
       renderData();
     });
 
@@ -35,7 +37,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       currentTab = "all";
       tabAll.classList.add("active");
       tabOwn.classList.remove("active");
-      document.getElementById("posts-list-title").textContent = "发现信息流推文";
+      const titleEl = document.getElementById("posts-list-title");
+      if (titleEl) titleEl.textContent = "发现信息流推文";
       renderData();
     });
   }
@@ -174,22 +177,41 @@ async function renderData() {
   const tweetList = Object.values(tweetRecords);
 
   const dIntervalEl = document.getElementById("d-interval");
-  if (dIntervalEl) dIntervalEl.textContent = `${intervalM}m`;
+  if (dIntervalEl) dIntervalEl.textContent = `${intervalM}`;
+
+  const tbIntervalEl = document.getElementById("tb-interval");
+  if (tbIntervalEl) tbIntervalEl.textContent = `${intervalM}`;
 
   const titleEl = document.getElementById("label-delta-title");
   if (titleEl) {
     titleEl.textContent = currentTab === "own"
-      ? `我的帖子近${intervalM}分增量`
-      : `信息流近${intervalM}分增量`;
+      ? `我的帖子实时热度`
+      : `发现信息流实时热度`;
   }
   const unitEl = document.getElementById("label-delta-unit");
-  if (unitEl) unitEl.textContent = `次曝光/${intervalM}m`;
+  if (unitEl) unitEl.textContent = `阅`;
 
   // Always display user's own handle on the hero card
   const accountNameEl = document.getElementById("account-name");
   if (accountNameEl) {
     accountNameEl.textContent = `@${myHandle}`;
   }
+
+  const statusTag = document.getElementById("status-tag");
+  const statusTagText = document.getElementById("status-tag-text");
+
+  // Helper function for metric table row rendering
+  const renderDeltaCell = (val) => {
+    if (val > 0) return `<span class="val-highlight">+${val}</span>`;
+    return `<span class="val-zero">+0</span>`;
+  };
+
+  const setMetricRow = (deltaId, totId, deltaVal, totVal) => {
+    const elDelta = document.getElementById(deltaId);
+    if (elDelta) elDelta.innerHTML = renderDeltaCell(deltaVal);
+    const elTot = document.getElementById(totId);
+    if (elTot) elTot.textContent = formatNumber(totVal);
+  };
 
   // 1. Separate own tweets from external feed tweets
   const ownTweets = [];
@@ -209,100 +231,142 @@ async function renderData() {
 
   // If no tweets at all in storage
   if (tweetList.length === 0) {
-    document.getElementById("status-tag").textContent = "等待页面数据";
-    document.getElementById("status-tag").className = "tag";
+    if (statusTagText) statusTagText.textContent = "等待页面数据";
+    if (statusTag) statusTag.className = "tag";
+
     const totalViewsEl = document.getElementById("total-views");
     if (totalViewsEl) totalViewsEl.textContent = "0";
     const totalHourlyEl = document.getElementById("total-hourly-rate");
     if (totalHourlyEl) totalHourlyEl.textContent = "0/h";
-    document.getElementById("delta-heat").textContent = "+0";
+    const deltaHeatEl = document.getElementById("delta-heat");
+    if (deltaHeatEl) {
+      deltaHeatEl.textContent = "+0";
+      deltaHeatEl.classList.remove("text-positive");
+    }
+    const burstHourlyEl = document.getElementById("burst-hourly-rate");
+    if (burstHourlyEl) burstHourlyEl.textContent = "0";
+
     const deltaTotEl = document.getElementById("delta-total");
     if (deltaTotEl) deltaTotEl.textContent = "+0";
-    document.getElementById("delta-rate").textContent = "未检测到推文";
-    document.getElementById("monitored-count").textContent = "监控中: 0";
-    document.getElementById("posts-container").innerHTML = `
-      <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 22px 10px; line-height:1.6;">
-        ⚡ <b>实时监控就绪</b><br>
-        当前正在专属监控 <b style="color:#38bdf8;">@${myHandle}</b>。<br>
-        请在浏览器中打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8;">x.com/${myHandle}</a> 浏览主页，推文旁将自动标出专属增量与时速！
-      </div>
-    `;
-    document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
+
+    const rateEl = document.getElementById("delta-rate");
+    if (rateEl) {
+      rateEl.className = "x-push-status-badge steady";
+      rateEl.innerHTML = `<span class="x-status-pulse-dot"></span><span>未检测到推文</span>`;
+    }
+
+    setMetricRow("d-views", "tot-views", 0, 0);
+    setMetricRow("d-likes", "tot-likes", 0, 0);
+    setMetricRow("d-rts", "tot-rts", 0, 0);
+    setMetricRow("d-replies", "tot-replies", 0, 0);
+    setMetricRow("d-bookmarks", "tot-bookmarks", 0, 0);
+
+    const countEl = document.getElementById("monitored-count");
+    if (countEl) countEl.textContent = "监控中: 0 条";
+
+    const postsContainer = document.getElementById("posts-container");
+    if (postsContainer) {
+      postsContainer.innerHTML = `
+        <div style="background:#ffffff; border:1px dashed #d1d5db; border-radius:8px; padding:18px 12px; text-align:center; color:#6b7280; font-size:11.5px; line-height:1.6;">
+          <div style="font-size:20px; margin-bottom:4px;">⚡</div>
+          <b style="color:#111827;">实时监控就绪</b><br>
+          当前正在专属监控 <b style="color:#0284c7;">@${myHandle}</b>。<br>
+          请在浏览器中打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#0284c7; text-decoration:underline;">x.com/${myHandle}</a> 浏览主页，推文将自动捕获并计算！
+        </div>
+      `;
+    }
+    const lastUpdateEl = document.getElementById("last-update");
+    if (lastUpdateEl) lastUpdateEl.textContent = "打开 x.com 即可实时标记";
     return;
   }
 
   // If user selected "我的帖子" but has not matched own tweets yet
   if (currentTab === "own" && ownTweets.length === 0) {
-    document.getElementById("status-tag").textContent = "专属监控中";
-    document.getElementById("status-tag").className = "tag live";
+    if (statusTagText) statusTagText.textContent = "专属监控中";
+    if (statusTag) statusTag.className = "tag live";
+
     const totalViewsEl = document.getElementById("total-views");
     if (totalViewsEl) totalViewsEl.textContent = "0";
     const totalHourlyEl = document.getElementById("total-hourly-rate");
     if (totalHourlyEl) totalHourlyEl.textContent = "0/h";
-    document.getElementById("delta-heat").textContent = "+0";
+    const deltaHeatEl = document.getElementById("delta-heat");
+    if (deltaHeatEl) {
+      deltaHeatEl.textContent = "+0";
+      deltaHeatEl.classList.remove("text-positive");
+    }
+    const burstHourlyEl = document.getElementById("burst-hourly-rate");
+    if (burstHourlyEl) burstHourlyEl.textContent = "0";
+
     const deltaTotEl = document.getElementById("delta-total");
     if (deltaTotEl) deltaTotEl.textContent = "+0";
-    document.getElementById("delta-rate").textContent = "等待主页浏览";
-    document.getElementById("monitored-count").textContent = "我的帖子: 0";
 
-    // Zero out grid
-    document.getElementById("d-likes").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
-    document.getElementById("d-rts").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
-    document.getElementById("d-replies").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
-    document.getElementById("d-bookmarks").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
-    document.getElementById("d-views").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
-    const dSpeedEl = document.getElementById("d-speed");
-    if (dSpeedEl) dSpeedEl.textContent = "0/h";
-
-    document.getElementById("posts-container").innerHTML = `
-      <div style="background:rgba(56,189,248,0.06); border:1px dashed rgba(56,189,248,0.25); border-radius:10px; padding:16px 12px; text-align:center; color:#94a3b8; font-size:11px; line-height:1.7;">
-        <div style="font-size:24px; margin-bottom:4px;">👤</div>
-        <b style="color:#38bdf8; font-size:12.5px;">专属账号已锁定: @${myHandle}</b><br>
-        当前在信息流已缓存 ${tweetList.length} 条推文。<br>
-        请在 X 打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8; text-decoration:underline;">个人主页 (Profile)</a> 浏览自己的推文，即可立即呈现！
-        <div style="margin-top:10px; display:flex; justify-content:center; gap:8px;">
-          <button id="btn-force-scan" style="background:#0284c7; border:none; color:#fff; border-radius:6px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer;">
-            🔄 立即扫描主页推文
-          </button>
-          <button id="btn-change-handle" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; border-radius:6px; padding:5px 12px; font-size:11px; cursor:pointer;">
-            切换账号
-          </button>
-        </div>
-      </div>
-    `;
-
-    const forceScanBtn = document.getElementById("btn-force-scan");
-    if (forceScanBtn) {
-      forceScanBtn.addEventListener("click", () => {
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-          if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
-              const _ = chrome.runtime.lastError;
-            });
-          }
-        });
-        setTimeout(renderData, 400);
-      });
+    const rateEl = document.getElementById("delta-rate");
+    if (rateEl) {
+      rateEl.className = "x-push-status-badge steady";
+      rateEl.innerHTML = `<span class="x-status-pulse-dot"></span><span>等待主页浏览</span>`;
     }
 
-    const changeHandleBtn = document.getElementById("btn-change-handle");
-    if (changeHandleBtn) {
-      changeHandleBtn.addEventListener("click", () => {
-        const modal = document.getElementById("account-modal");
-        const inputEl = document.getElementById("modal-handle-input");
-        if (modal && inputEl) {
-          inputEl.value = myHandle;
-          modal.classList.add("open");
-          inputEl.focus();
-        }
-      });
+    setMetricRow("d-views", "tot-views", 0, 0);
+    setMetricRow("d-likes", "tot-likes", 0, 0);
+    setMetricRow("d-rts", "tot-rts", 0, 0);
+    setMetricRow("d-replies", "tot-replies", 0, 0);
+    setMetricRow("d-bookmarks", "tot-bookmarks", 0, 0);
+
+    const countEl = document.getElementById("monitored-count");
+    if (countEl) countEl.textContent = "我的帖子: 0 条";
+
+    const postsContainer = document.getElementById("posts-container");
+    if (postsContainer) {
+      postsContainer.innerHTML = `
+        <div style="background:#ffffff; border:1px dashed #d1d5db; border-radius:8px; padding:16px 12px; text-align:center; color:#6b7280; font-size:11.5px; line-height:1.6;">
+          <div style="font-size:20px; margin-bottom:4px;">👤</div>
+          <b style="color:#111827;">专属账号已锁定: @${myHandle}</b><br>
+          当前在信息流已缓存 ${tweetList.length} 条推文。<br>
+          请在 X 打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#0284c7; text-decoration:underline;">个人主页 (Profile)</a> 浏览自己的推文，即可立即呈现！
+          <div style="margin-top:10px; display:flex; justify-content:center; gap:8px;">
+            <button id="btn-force-scan" style="background:#0f172a; border:none; color:#fff; border-radius:6px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer;">
+              🔄 立即扫描主页推文
+            </button>
+            <button id="btn-change-handle" style="background:#f3f4f6; border:1px solid #e5e7eb; color:#4b5563; border-radius:6px; padding:5px 12px; font-size:11px; cursor:pointer;">
+              切换账号
+            </button>
+          </div>
+        </div>
+      `;
+
+      const forceScanBtn = document.getElementById("btn-force-scan");
+      if (forceScanBtn) {
+        forceScanBtn.addEventListener("click", () => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (tabs[0]?.id) {
+              chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
+                const _ = chrome.runtime.lastError;
+              });
+            }
+          });
+          setTimeout(renderData, 400);
+        });
+      }
+
+      const changeHandleBtn = document.getElementById("btn-change-handle");
+      if (changeHandleBtn) {
+        changeHandleBtn.addEventListener("click", () => {
+          const modal = document.getElementById("account-modal");
+          const inputEl = document.getElementById("modal-handle-input");
+          if (modal && inputEl) {
+            inputEl.value = myHandle;
+            modal.classList.add("open");
+            inputEl.focus();
+          }
+        });
+      }
     }
 
     return;
   }
 
-  document.getElementById("status-tag").textContent = `${intervalM}m 实时监控中`;
-  document.getElementById("status-tag").className = "tag live";
+  if (statusTagText) statusTagText.textContent = `${intervalM}m 实时监控中`;
+  if (statusTag) statusTag.className = "tag live";
 
   // Aggregate Totals, Deltas & Hourly Velocity across targetList
   let totalViews = 0;
@@ -335,7 +399,7 @@ async function renderData() {
       ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
       : `${hourlyVelocity}/h`;
 
-    // Find previous snapshot ~3 mins ago
+    // Find previous snapshot ~ intervalM mins ago
     let prev = snaps[0];
     const targetTimestamp = now - targetIntervalMs;
     let minDiff = Infinity;
@@ -348,7 +412,7 @@ async function renderData() {
       }
     }
 
-    // 3m Delta
+    // Interval Delta
     const dPeriod = {
       views: Math.max(0, curr.views - prev.views),
       likes: Math.max(0, curr.likes - prev.likes),
@@ -400,60 +464,74 @@ async function renderData() {
     });
   }
 
-  // Hero Card Summary: Shows Total Views + Hourly Velocity + 3m Delta + Lifetime Delta
-  const totalViewsEl = document.getElementById("total-views");
-  if (totalViewsEl) totalViewsEl.textContent = formatNumber(totalViews);
-
+  // --- Hero Card 3-Pillars ---
+  // 1. 全帖累计均速
   const totalHourlyEl = document.getElementById("total-hourly-rate");
   if (totalHourlyEl) {
     totalHourlyEl.textContent = totalHourlyRate >= 10000
       ? `${(totalHourlyRate / 1000).toFixed(1)}k/h`
       : `${totalHourlyRate}/h`;
   }
+  const totalViewsEl = document.getElementById("total-views");
+  if (totalViewsEl) totalViewsEl.textContent = formatNumber(totalViews);
 
+  // 2. 眼下起量 (近10分增量与折算时速)
   const deltaHeatEl = document.getElementById("delta-heat");
-  if (deltaHeatEl) deltaHeatEl.textContent = `+${totalDeltaViews}`;
+  if (deltaHeatEl) {
+    deltaHeatEl.textContent = `+${totalDeltaViews}`;
+    if (totalDeltaViews > 0) {
+      deltaHeatEl.classList.add("text-positive");
+    } else {
+      deltaHeatEl.classList.remove("text-positive");
+    }
+  }
 
+  const burstHourly = Math.round(totalDeltaViews * (60 / (intervalM || 10)));
+  const burstHourlyEl = document.getElementById("burst-hourly-rate");
+  if (burstHourlyEl) {
+    burstHourlyEl.textContent = burstHourly >= 10000 ? `${(burstHourly / 1000).toFixed(1)}k` : String(burstHourly);
+  }
+
+  // 3. 当前推流态势 & 监控累计
   const deltaTotEl = document.getElementById("delta-total");
   if (deltaTotEl) deltaTotEl.textContent = `+${totalLifetimeDeltaViews}`;
-  
+
   const rateEl = document.getElementById("delta-rate");
-  if (totalDeltaViews >= 50 || totalHourlyRate >= 500) {
-    rateEl.textContent = "🔥 爆款推流中";
-    rateEl.style.background = "rgba(244, 63, 94, 0.2)";
-    rateEl.style.color = "#fb7185";
-  } else if (totalDeltaViews >= 5 || totalHourlyRate >= 80) {
-    rateEl.textContent = "⚡ 正在加速推流";
-    rateEl.style.background = "rgba(16, 185, 129, 0.2)";
-    rateEl.style.color = "#34d399";
-  } else {
-    rateEl.textContent = "☕ 平稳推流";
-    rateEl.style.background = "rgba(100, 116, 139, 0.2)";
-    rateEl.style.color = "#94a3b8";
+  if (rateEl) {
+    let rateClass = "steady";
+    let rateText = "☕ 平稳推流";
+    if (totalDeltaViews >= 50 || totalHourlyRate >= 500 || burstHourly >= 500) {
+      rateClass = "hot";
+      rateText = "🔥 爆款推流中";
+    } else if (totalDeltaViews >= 5 || totalHourlyRate >= 80 || burstHourly >= 60) {
+      rateClass = "growing";
+      rateText = "⚡ 正在加速推流";
+    }
+    rateEl.className = `x-push-status-badge ${rateClass}`;
+    rateEl.innerHTML = `<span class="x-status-pulse-dot"></span><span>${rateText}</span>`;
   }
 
-  // Breakdown with Total and (+Delta)
-  document.getElementById("d-likes").innerHTML = `${formatNumber(totalBreakdown.likesTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.likes})</span>`;
-  document.getElementById("d-rts").innerHTML = `${formatNumber(totalBreakdown.retweetsTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.retweets})</span>`;
-  document.getElementById("d-replies").innerHTML = `${formatNumber(totalBreakdown.repliesTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.replies})</span>`;
-  document.getElementById("d-bookmarks").innerHTML = `${formatNumber(totalBreakdown.bookmarksTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.bookmarks})</span>`;
-  document.getElementById("d-views").innerHTML = `${formatNumber(totalBreakdown.viewsTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.views})</span>`;
-
-  const dSpeedEl = document.getElementById("d-speed");
-  if (dSpeedEl) {
-    dSpeedEl.textContent = totalHourlyRate >= 10000
-      ? `${(totalHourlyRate / 1000).toFixed(1)}k/h`
-      : `${totalHourlyRate}/h`;
-  }
+  // --- Breakdown Table Rows ---
+  setMetricRow("d-views", "tot-views", totalBreakdown.views, totalBreakdown.viewsTotal);
+  setMetricRow("d-likes", "tot-likes", totalBreakdown.likes, totalBreakdown.likesTotal);
+  setMetricRow("d-rts", "tot-rts", totalBreakdown.retweets, totalBreakdown.retweetsTotal);
+  setMetricRow("d-replies", "tot-replies", totalBreakdown.replies, totalBreakdown.repliesTotal);
+  setMetricRow("d-bookmarks", "tot-bookmarks", totalBreakdown.bookmarks, totalBreakdown.bookmarksTotal);
 
   // Time
-  document.getElementById("last-update").textContent = `更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  const lastUpdateEl = document.getElementById("last-update");
+  if (lastUpdateEl) {
+    lastUpdateEl.textContent = `采样更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  }
 
   // Sort: prioritize tweets with recent view changes or highest velocity
   activeTweets.sort((a, b) => (b.dPeriod.views * 2 + b.hourlyVelocity) - (a.dPeriod.views * 2 + a.hourlyVelocity) || (b.dTot.views - a.dTot.views));
 
   // Render list
-  document.getElementById("monitored-count").textContent = `${currentTab === "own" ? "我的帖子" : "已监控"}: ${activeTweets.length} 条`;
+  const countEl = document.getElementById("monitored-count");
+  if (countEl) {
+    countEl.textContent = `${currentTab === "own" ? "我的帖子" : "已监控"}: ${activeTweets.length} 条`;
+  }
   renderPostsList(activeTweets, intervalM);
 
   // Sparkline
@@ -462,20 +540,39 @@ async function renderData() {
 
 function renderPostsList(tweets, intervalM = 10) {
   const container = document.getElementById("posts-container");
+  if (!container) return;
   container.innerHTML = "";
 
-  tweets.slice(0, 10).forEach((t) => {
+  if (tweets.length === 0) {
+    container.innerHTML = `<div style="color:#9ca3af; text-align:center; padding: 20px 0; font-size:11.5px;">暂无匹配的推文数据</div>`;
+    return;
+  }
+
+  tweets.slice(0, 15).forEach((t) => {
     const card = document.createElement("div");
     card.className = "post-card";
     const c = t.current || {};
     const dp = t.dPeriod || {};
     const dt = t.dTot || {};
 
+    const isPositive = (dp.views || 0) > 0;
+    const deltaBadge = isPositive
+      ? `<span class="post-delta-badge positive">${intervalM}m: +${dp.views}</span>`
+      : `<span class="post-delta-badge">${intervalM}m: +0</span>`;
+
     card.innerHTML = `
-      <div class="post-text">${escapeHtml(t.text)}</div>
+      <div class="post-text" title="${escapeHtml(t.text)}">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ <b>${formatNumber(c.views)}</b> 总阅 <span style="color:#fbbf24; font-weight:700; margin-left:3px;">⚡ ${t.formattedHourlyRate}</span> · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
-        <span class="post-delta" style="color: #34d399;">${intervalM}m: <b>+${dp.views || 0}</b> | 累计: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
+        <div class="post-stats-left">
+          <span>👁️ <b>${formatNumber(c.views)}</b></span>
+          <span class="post-speed-pill">⚡ ${t.formattedHourlyRate}</span>
+          <span>❤️ ${formatNumber(c.likes)}</span>
+          <span>💬 ${formatNumber(c.replies)}</span>
+        </div>
+        <div class="post-stats-right">
+          ${deltaBadge}
+          <span class="post-delta-tot">累计: +${dt.views || 0}</span>
+        </div>
       </div>
     `;
     container.appendChild(card);
@@ -490,9 +587,9 @@ function drawSparkline(points) {
   const area = document.getElementById("sparkline-area");
   if (!svg || !path || !area) return;
 
-  const width = 320;
-  const height = 40;
-  const paddingY = 4;
+  const width = 350;
+  const height = 34;
+  const paddingY = 3;
 
   const values = points.map(p => p.heatDelta || 0);
   const maxVal = Math.max(...values, 10);
