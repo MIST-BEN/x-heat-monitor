@@ -262,6 +262,10 @@
   line-height: 1.2;
 }
 
+.x-meter-value.text-positive {
+  color: #15803d !important;
+}
+
 .x-meter-unit {
   font-size: 11px;
   color: #6b7280;

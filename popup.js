@@ -133,7 +133,7 @@ async function bindHandleAndRetag(handle) {
     }
   }
 
-  const newConfig = { ...(storage.config || { intervalMinutes: 3 }), myHandle: clean };
+  const newConfig = { ...(storage.config || { intervalMinutes: 10 }), myHandle: clean };
 
   await chrome.storage.local.set({
     my_user_handle: clean,
@@ -168,8 +168,8 @@ async function renderData() {
   ]);
 
   const tweetRecords = storage.tweet_records || {};
-  const config = storage.config || { intervalMinutes: 3 };
-  const intervalM = config.intervalMinutes || 3;
+  const config = storage.config || { intervalMinutes: 10 };
+  const intervalM = config.intervalMinutes || 10;
   const myHandle = (storage.my_user_handle || config.myHandle || "sben96001").trim();
   const tweetList = Object.values(tweetRecords);
 
@@ -460,7 +460,7 @@ async function renderData() {
   drawSparkline(activeTweets.map(t => ({ heatDelta: t.dPeriod.views + t.dPeriod.likes * 5 })));
 }
 
-function renderPostsList(tweets, intervalM = 3) {
+function renderPostsList(tweets, intervalM = 10) {
   const container = document.getElementById("posts-container");
   container.innerHTML = "";
 

@@ -21,9 +21,9 @@
   }
   window.__X_HEAT_PULSE_LOADED__ = true;
 
-  console.log('[X-Heat-Pulse] v1.4.2 Content script initialized.');
+  console.log('[X-Heat-Pulse] v1.5.1 Content script initialized.');
 
-  const DEFAULT_INTERVAL_MINUTES = 3;
+  const DEFAULT_INTERVAL_MINUTES = 10;
   let isScanning = false;
   let scanTimeout = null;
   let scanInterval = null;
@@ -599,7 +599,7 @@
             ...metrics
           });
 
-          if (record.snapshots.length > 60) {
+          if (record.snapshots.length > 100) {
             record.snapshots.shift();
           }
           hasNewRecords = true;
@@ -957,38 +957,38 @@
 
       <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
       <div class="x-velocity-meter-card">
-        <!-- 1. 全帖总均速 (总浏览 ÷ 发帖时长) -->
+        <!-- 1. 全帖累计均速 (发帖多久与全周期平均表现) -->
         <div class="x-meter-col">
-          <div class="x-meter-label">全帖总均速</div>
+          <div class="x-meter-label">全帖累计均速</div>
           <div class="x-meter-number-row">
             <span class="x-meter-value">${info.hourlyVelocityText}</span>
             ${info.hourlyVelocityText !== "测速中" ? '<span class="x-meter-unit">阅/h</span>' : ''}
           </div>
-          <div class="x-meter-subtext">${c.views} 阅 ÷ ${info.publishAgeStr}</div>
+          <div class="x-meter-subtext">已发帖 ${info.publishAgeStr} · ${c.views} 阅</div>
         </div>
 
         <div class="x-meter-divider"></div>
 
-        <!-- 2. 监控期间增量时速 (实际增量 ÷ 监控时长) -->
+        <!-- 2. 眼下起量 (近10分钟瞬时增量与起量折算时速) -->
         <div class="x-meter-col">
-          <div class="x-meter-label">监控增量时速</div>
+          <div class="x-meter-label">眼下起量 (近${info.intervalPeriodStr || 10}分)</div>
           <div class="x-meter-number-row">
-            <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
-            <span class="x-meter-unit">阅/h</span>
+            <span class="x-meter-value ${dp.views > 0 ? 'text-positive' : ''}">${dp.views > 0 ? '+' + dp.views : '+0'}</span>
+            <span class="x-meter-unit">阅</span>
           </div>
-          <div class="x-meter-subtext">+${dt.views} 阅 ÷ ${info.totalAgeStr}</div>
+          <div class="x-meter-subtext">折算时速 ~${info.recentBurstRate} 阅/h</div>
         </div>
 
         <div class="x-meter-divider"></div>
 
-        <!-- 3. 算法推流态势 & 近期实时推流 -->
+        <!-- 3. 算法推流态势 & 监控累计增量 -->
         <div class="x-meter-col">
           <div class="x-meter-label">当前推流态势</div>
           <div class="x-push-status-badge ${info.pillClass}">
             <span class="x-status-pulse-dot"></span>
             <span>${info.pushStatus}</span>
           </div>
-          <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
+          <div class="x-meter-subtext">监控累计 +${dt.views} (持续 ${info.totalAgeStr})</div>
         </div>
       </div>
 
@@ -996,7 +996,7 @@
         <thead>
           <tr>
             <th class="col-left">互动指标</th>
-            <th class="col-right">近${info.intervalPeriodStr || 3}分钟增量</th>
+            <th class="col-right">近${info.intervalPeriodStr || 10}分钟增量</th>
             <th class="col-right">监控累计增量</th>
             <th class="col-right">当前总量</th>
           </tr>

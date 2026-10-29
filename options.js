@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("myHandle").value = myHandle;
 
   if (config) {
-    document.getElementById("intervalMinutes").value = config.intervalMinutes || 3;
+    document.getElementById("intervalMinutes").value = config.intervalMinutes || 10;
     document.getElementById("alertThreshold").value = config.alertThreshold || 40;
     document.getElementById("enableNotification").checked = config.enableNotification !== false;
 

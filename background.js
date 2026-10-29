@@ -5,7 +5,7 @@
  */
 
 const DEFAULT_CONFIG = {
-  intervalMinutes: 3,
+  intervalMinutes: 10,
   alertThreshold: 40,
   enableNotification: true,
   myHandle: "sben96001",
@@ -24,8 +24,8 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log("[X-Heat-Pulse] Extension initialized/updated.");
   const existing = await chrome.storage.local.get(["config", "my_user_handle"]);
   let cfg = existing.config || DEFAULT_CONFIG;
-  if (!existing.config || existing.config.intervalMinutes === 5) {
-    cfg = { ...cfg, intervalMinutes: 3, myHandle: cfg.myHandle || "sben96001" };
+  if (!existing.config || existing.config.intervalMinutes === 5 || existing.config.intervalMinutes === 3) {
+    cfg = { ...cfg, intervalMinutes: 10, myHandle: cfg.myHandle || "sben96001" };
     await chrome.storage.local.set({ config: cfg });
   }
   if (!existing.my_user_handle) {
@@ -64,7 +64,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 function setupAlarm(intervalMinutes) {
   chrome.alarms.clear("x_heat_polling", () => {
     chrome.alarms.create("x_heat_polling", {
-      periodInMinutes: Math.max(1, intervalMinutes || 3)
+      periodInMinutes: Math.max(1, intervalMinutes || 10)
     });
     console.log(`[X-Heat-Pulse] Alarm set for every ${intervalMinutes} minutes.`);
   });
@@ -120,7 +120,7 @@ async function executePollingCycle(source = "SCHEDULED") {
     let totalOwnViewsDelta = 0;
     let totalLifetimeDelta = 0;
     let totalHourlyRate = 0;
-    const intervalMinutes = config.intervalMinutes || 3;
+    const intervalMinutes = config.intervalMinutes || 10;
     const targetIntervalMs = intervalMinutes * 60 * 1000;
 
     if (ownRecords.length > 0) {
@@ -183,7 +183,7 @@ async function executePollingCycle(source = "SCHEDULED") {
 }
 
 // 5. Update Action Badge UI (Exclusively displays user's own post view metrics)
-function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, totalHourlyRate, hasOwnPosts, myHandle = "sben96001", intervalMinutes = 3) {
+function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, totalHourlyRate, hasOwnPosts, myHandle = "sben96001", intervalMinutes = 10) {
   if (!hasOwnPosts) {
     chrome.action.setBadgeText({ text: "" });
     chrome.action.setTitle({ title: `X Heat Pulse: 正在等待检测 @${myHandle} 的推文` });
