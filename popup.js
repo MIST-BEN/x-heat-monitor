@@ -1,6 +1,7 @@
 /**
- * X Heat Pulse - Popup Logic & Visualization
+ * X Heat Pulse - Popup Logic & Visualization (v1.2.0)
  * Aggregates real in-page recorded tweet data from x.com
+ * Supports both 5-minute delta and total lifetime delta since first seen.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -12,12 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   refreshBtn.addEventListener("click", () => {
     refreshIcon.classList.add("spinning");
-    // Trigger active tab rescan and storage sync
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
       if (tabs[0]?.id) {
-        chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
-          // ignore error if tab is not on x.com
-        });
+        chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {});
       }
     });
 
@@ -52,11 +50,8 @@ async function renderData() {
 
   const tweetRecords = storage.tweet_records || {};
   const config = storage.config || { intervalMinutes: 5 };
-  const history = storage.history || [];
-
   const tweetList = Object.values(tweetRecords);
 
-  // 1. Tag & Status
   document.getElementById("d-interval").textContent = `${config.intervalMinutes}m`;
 
   if (tweetList.length === 0) {
@@ -69,7 +64,7 @@ async function renderData() {
     document.getElementById("posts-container").innerHTML = `
       <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 20px 10px; line-height:1.6;">
         ⚡ <b>实时标柱已激活</b><br>
-        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览你的主页或个人帖子，插件会自动在每条帖子右下角标出 5 分钟热度增量！
+        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览你的主页或帖子，插件会自动在每条帖子右下角标出 5 分钟增量与自首次看到的累计总增量！
       </div>
     `;
     document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
@@ -79,8 +74,9 @@ async function renderData() {
   document.getElementById("status-tag").textContent = "页面实时监控中";
   document.getElementById("status-tag").className = "tag live";
 
-  // 2. Aggregate Deltas across all tracked tweets
-  let totalDeltaHeat = 0;
+  // Aggregate Deltas
+  let totalDeltaViews = 0;
+  let totalDeltaLikes = 0;
   const totalBreakdown = { views: 0, likes: 0, retweets: 0, replies: 0, bookmarks: 0 };
   const targetIntervalMs = (config.intervalMinutes || 5) * 60 * 1000;
   const now = Date.now();
@@ -92,6 +88,7 @@ async function renderData() {
     if (snaps.length === 0) continue;
 
     const curr = snaps[snaps.length - 1];
+    const first = tweet.firstSeenMetrics || snaps[0];
 
     // Find previous snapshot ~5 mins ago
     let prev = snaps[0];
@@ -106,60 +103,66 @@ async function renderData() {
       }
     }
 
-    const dViews = Math.max(0, curr.views - prev.views);
-    const dLikes = Math.max(0, curr.likes - prev.likes);
-    const dRetweets = Math.max(0, curr.retweets - prev.retweets);
-    const dReplies = Math.max(0, curr.replies - prev.replies);
-    const dBookmarks = Math.max(0, curr.bookmarks - prev.bookmarks);
+    // 5m Delta
+    const d5 = {
+      views: Math.max(0, curr.views - prev.views),
+      likes: Math.max(0, curr.likes - prev.likes),
+      retweets: Math.max(0, curr.retweets - prev.retweets),
+      replies: Math.max(0, curr.replies - prev.replies),
+      bookmarks: Math.max(0, curr.bookmarks - prev.bookmarks)
+    };
 
-    const heatDelta = Math.round(
-      dViews * 0.01 +
-      dLikes * 2.0 +
-      dRetweets * 5.0 +
-      dReplies * 3.0 +
-      dBookmarks * 4.0
-    );
+    // Total Lifetime Delta since first seen
+    const dTot = {
+      views: Math.max(0, curr.views - first.views),
+      likes: Math.max(0, curr.likes - first.likes),
+      retweets: Math.max(0, curr.retweets - first.retweets),
+      replies: Math.max(0, curr.replies - first.replies),
+      bookmarks: Math.max(0, curr.bookmarks - first.bookmarks)
+    };
 
-    totalBreakdown.views += dViews;
-    totalBreakdown.likes += dLikes;
-    totalBreakdown.retweets += dRetweets;
-    totalBreakdown.replies += dReplies;
-    totalBreakdown.bookmarks += dBookmarks;
-    totalDeltaHeat += heatDelta;
+    totalBreakdown.views += d5.views;
+    totalBreakdown.likes += d5.likes;
+    totalBreakdown.retweets += d5.retweets;
+    totalBreakdown.replies += d5.replies;
+    totalBreakdown.bookmarks += d5.bookmarks;
+
+    totalDeltaViews += d5.views;
+    totalDeltaLikes += d5.likes;
 
     activeTweets.push({
       id: tweet.id,
       author: tweet.author,
       text: tweet.text || "推文",
-      heatDelta,
       current: curr,
-      delta: { views: dViews, likes: dLikes, retweets: dRetweets, replies: dReplies, bookmarks: dBookmarks }
+      d5,
+      dTot,
+      firstSeenAt: tweet.firstSeenAt || now
     });
   }
 
-  // Account display
+  // Account name
   if (activeTweets.length > 0 && activeTweets[0].author) {
     document.getElementById("account-name").textContent = `@${activeTweets[0].author}`;
   }
 
-  // Delta Card
-  document.getElementById("delta-heat").textContent = totalDeltaHeat > 0 ? `+${totalDeltaHeat}` : `${totalDeltaHeat}`;
+  // Delta Card Summary
+  const net5m = totalDeltaLikes * 10 + totalDeltaViews;
+  document.getElementById("delta-heat").textContent = totalDeltaViews > 0 || totalDeltaLikes > 0
+    ? `+${totalDeltaViews}`
+    : `0`;
   
   const rateEl = document.getElementById("delta-rate");
-  if (totalDeltaHeat >= 100) {
-    rateEl.textContent = "🔥 极高爆发";
-    rateEl.style.background = "rgba(239, 68, 68, 0.2)";
-    rateEl.style.color = "#f87171";
-  } else if (totalDeltaHeat >= 30) {
-    rateEl.textContent = "⚡ 快速上升";
-    rateEl.style.background = "rgba(245, 158, 11, 0.2)";
-    rateEl.style.color = "#fbbf24";
-  } else if (totalDeltaHeat > 0) {
-    rateEl.textContent = "📈 稳步上升";
-    rateEl.style.background = "rgba(16, 185, 129, 0.2)";
-    rateEl.style.color = "#34d399";
+  if (totalDeltaLikes > 0 || totalDeltaViews >= 50) {
+    rateEl.textContent = "🔥 快速增长";
+    rateEl.style.background = "rgba(249, 24, 128, 0.2)";
+    rateEl.style.color = "#f91880";
+  } else if (totalDeltaViews > 0) {
+    rateEl.textContent = "⚡ 持续上升";
+    rateEl.style.background = "rgba(0, 186, 124, 0.2)";
+    rateEl.style.color = "#00ba7c";
   } else {
-    rateEl.textContent = "采样基准就绪";
+    rateEl.textContent = "平稳";
     rateEl.style.background = "rgba(100, 116, 139, 0.2)";
     rateEl.style.color = "#94a3b8";
   }
@@ -172,17 +175,17 @@ async function renderData() {
   document.getElementById("d-views").textContent = `+${totalBreakdown.views}`;
 
   // Time
-  document.getElementById("last-update").textContent = `采样更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  document.getElementById("last-update").textContent = `更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
-  // Sort active tweets by heat delta descending
-  activeTweets.sort((a, b) => b.heatDelta - a.heatDelta || (b.current.views - a.current.views));
+  // Sort: prioritize tweets with recent changes
+  activeTweets.sort((a, b) => (b.d5.views + b.d5.likes * 10) - (a.d5.views + a.d5.likes * 10) || (b.dTot.views - a.dTot.views));
 
   // Render list
-  document.getElementById("monitored-count").textContent = `已捕获: ${activeTweets.length} 条`;
+  document.getElementById("monitored-count").textContent = `监控中: ${activeTweets.length} 条`;
   renderPostsList(activeTweets);
 
-  // Sparkline from history
-  drawSparkline(activeTweets.map(t => ({ heatDelta: t.heatDelta })));
+  // Sparkline
+  drawSparkline(activeTweets.map(t => ({ heatDelta: t.d5.views + t.d5.likes * 5 })));
 }
 
 function renderPostsList(tweets) {
@@ -193,20 +196,24 @@ function renderPostsList(tweets) {
     const card = document.createElement("div");
     card.className = "post-card";
     const c = t.current || {};
-    const d = t.delta || {};
+    const d5 = t.d5 || {};
+    const dt = t.dTot || {};
 
-    const deltaBadges = [];
-    if (d.likes > 0) deltaBadges.push(`赞+${d.likes}`);
-    if (d.retweets > 0) deltaBadges.push(`转+${d.retweets}`);
-    if (d.views > 0) deltaBadges.push(`阅+${d.views}`);
+    let d5Str = [];
+    if (d5.likes > 0) d5Str.push(`赞+${d5.likes}`);
+    if (d5.views > 0) d5Str.push(`阅+${d5.views}`);
+    const d5Text = d5Str.length > 0 ? d5Str.join(" ") : "0";
 
-    const deltaSummary = deltaBadges.length > 0 ? deltaBadges.join(" · ") : "5m稳定";
+    let totStr = [];
+    if (dt.likes > 0) totStr.push(`赞+${dt.likes}`);
+    if (dt.views > 0) totStr.push(`阅+${dt.views}`);
+    const totText = totStr.length > 0 ? totStr.join(" ") : "0";
 
     card.innerHTML = `
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)} · 🔁 ${formatNumber(c.retweets)}</span>
-        <span class="post-delta" style="${t.heatDelta > 0 ? 'color:#00ba7c;' : ''}">Δ ${deltaSummary}</span>
+        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)}</span>
+        <span class="post-delta" style="color: #00ba7c;">5m: <b>${d5Text}</b> | 累计: <b style="color:#1d9bf0;">${totText}</b></span>
       </div>
     `;
     container.appendChild(card);

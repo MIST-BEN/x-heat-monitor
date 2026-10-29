@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "X Heat Pulse - 帖子热度差分监测器",
-  "version": "1.1.0",
-  "description": "面向创作者的 X (Twitter) 帖子热度差分检测插件。在页面推文旁直接悬浮标出 5 分钟热度增量，精准捕捉流量爆发。",
+  "version": "1.2.0",
+  "description": "面向创作者的 X (Twitter) 帖子热度差分与自始增量检测插件。直接在推文旁标出 5 分钟增量与自看到起的总增量。",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -35,6 +35,7 @@
   "permissions": [
     "alarms",
     "storage",
+    "unlimitedStorage",
     "cookies",
     "notifications"
   ],

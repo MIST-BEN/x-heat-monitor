@@ -1,86 +1,98 @@
-/* X Heat Pulse - In-Page Tweet Action Bar Badge Styles */
+/* X Heat Pulse - In-Page Tweet Action Bar Badge Styles (v1.2.0) */
 
 .x-heat-pulse-badge-container {
   display: inline-flex;
   align-items: center;
   position: relative;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  margin-left: 6px;
+  margin-left: 8px;
   cursor: pointer;
   user-select: none;
+  vertical-align: middle;
 }
 
 .x-heat-pulse-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 6px;
+  padding: 3px 10px;
   border-radius: 9999px;
   font-size: 11px;
   font-weight: 600;
-  line-height: 1;
-  transition: all 0.2s ease-in-out;
-  border: 1px solid rgba(29, 155, 240, 0.3);
+  line-height: 1.2;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 1px solid rgba(29, 155, 240, 0.35);
   background: rgba(29, 155, 240, 0.08);
   color: #1d9bf0;
+  white-space: nowrap;
 }
 
 .x-heat-pulse-pill:hover {
   background: rgba(29, 155, 240, 0.18);
   border-color: #1d9bf0;
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
-/* Different Heat Levels */
+/* Different Statuses */
 .x-heat-pulse-pill.hot {
-  border-color: rgba(249, 24, 128, 0.5);
-  background: rgba(249, 24, 128, 0.12);
+  border-color: rgba(249, 24, 128, 0.6);
+  background: rgba(249, 24, 128, 0.15);
   color: #f91880;
-  box-shadow: 0 0 8px rgba(249, 24, 128, 0.25);
+  box-shadow: 0 0 10px rgba(249, 24, 128, 0.25);
 }
 
 .x-heat-pulse-pill.growing {
-  border-color: rgba(0, 186, 124, 0.5);
+  border-color: rgba(0, 186, 124, 0.6);
   background: rgba(0, 186, 124, 0.12);
   color: #00ba7c;
 }
 
 .x-heat-pulse-pill.steady {
-  border-color: rgba(113, 118, 123, 0.3);
+  border-color: rgba(113, 118, 123, 0.35);
   background: rgba(113, 118, 123, 0.08);
   color: #71767b;
 }
 
 .x-heat-pulse-pill.recording {
-  border-color: rgba(255, 212, 0, 0.4);
-  background: rgba(255, 212, 0, 0.08);
+  border-color: rgba(255, 212, 0, 0.5);
+  background: rgba(255, 212, 0, 0.1);
   color: #ffd400;
 }
 
-/* Pulsing icon */
-.x-heat-pulse-icon {
+.x-heat-pulse-divider {
   display: inline-block;
-  font-size: 12px;
+  width: 1px;
+  height: 10px;
+  background: currentColor;
+  opacity: 0.35;
+  margin: 0 1px;
 }
 
-/* Detail Popover Tooltip */
+.x-heat-pulse-sub {
+  opacity: 0.88;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* Detail Popover Tooltip (Expanded, No Truncation) */
 .x-heat-pulse-tooltip {
   display: none;
   position: absolute;
   bottom: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  background: #0f1419;
+  right: 0;
+  background: #000000;
   color: #f7f9f9;
   border: 1px solid #2f3336;
-  border-radius: 10px;
-  padding: 10px 12px;
-  width: 220px;
+  border-radius: 12px;
+  padding: 12px 14px;
+  width: 320px;
+  box-sizing: border-box;
   font-size: 11px;
-  line-height: 1.5;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
   z-index: 999999;
-  pointer-events: none;
+  pointer-events: auto; /* Allow clicking reset button */
 }
 
 .x-heat-pulse-badge-container:hover .x-heat-pulse-tooltip {
@@ -92,37 +104,92 @@
   font-weight: 700;
   font-size: 12px;
   color: #1d9bf0;
-  padding-bottom: 4px;
-  margin-bottom: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
   border-bottom: 1px solid #2f3336;
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
-.x-heat-pulse-tooltip-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin-bottom: 6px;
+.x-heat-pulse-tooltip-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 11px;
 }
 
-.x-heat-pulse-tooltip-item {
+.x-heat-pulse-tooltip-table th {
+  color: #71767b;
+  font-weight: 500;
+  text-align: right;
+  padding: 3px 4px;
+  border-bottom: 1px solid #2f3336;
+  font-size: 10px;
+}
+
+.x-heat-pulse-tooltip-table th:first-child {
+  text-align: left;
+}
+
+.x-heat-pulse-tooltip-table td {
+  padding: 4px 4px;
+  text-align: right;
+  border-bottom: 1px solid #16181c;
+  font-feature-settings: "tnum";
+}
+
+.x-heat-pulse-tooltip-table td:first-child {
+  text-align: left;
+  color: #e7e9ea;
+}
+
+.x-heat-pulse-tooltip-table td.pos {
+  color: #00ba7c;
+  font-weight: 600;
+}
+
+.x-heat-pulse-tooltip-table td.neutral {
   color: #71767b;
 }
 
-.x-heat-pulse-tooltip-item b {
-  color: #00ba7c;
-  margin-left: 2px;
+.x-heat-pulse-tooltip-table td.total {
+  color: #1d9bf0;
+  font-weight: 600;
+}
+
+.x-heat-pulse-tooltip-table td.raw {
+  color: #71767b;
+  font-size: 10px;
 }
 
 .x-heat-pulse-tooltip-footer {
   font-size: 10px;
   color: #71767b;
   border-top: 1px solid #2f3336;
-  padding-top: 4px;
+  padding-top: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.x-heat-pulse-reset-btn {
+  background: #16181c;
+  border: 1px solid #2f3336;
+  color: #71767b;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 9px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.x-heat-pulse-reset-btn:hover {
+  background: #2f3336;
+  color: #f7f9f9;
 }
 
 @keyframes xHeatFadeIn {
-  from { opacity: 0; transform: translate(-50%, 4px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
