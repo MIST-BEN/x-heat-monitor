@@ -738,19 +738,33 @@
       pushStatus = "⚡ 正在加速推流";
     }
 
+    const formatCompactNum = (num) => {
+      if (!num || isNaN(num)) return "0";
+      if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+      if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+      return String(num);
+    };
+
     let mainText = "";
     let subText = "";
+    const compactViews = formatCompactNum(vCurr);
 
     if (isNew) {
       pillClass = "recording";
       icon = "⏱️";
-      mainText = `${icon} ${vCurr} 阅 · ${formattedHourlyRate}`;
+      mainText = `${icon} ${compactViews} 阅 · ${formattedHourlyRate}`;
       subText = `${intervalMinutes}m 监测中`;
     } else {
-      mainText = `${icon} ${vCurr} 阅 · ${formattedHourlyRate}`;
-      subText = vTot > 0 && vTot !== vPeriod
-        ? `${intervalMinutes}m +${vPeriod} · 累计 +${vTot}`
-        : `${intervalMinutes}m +${vPeriod}`;
+      mainText = `${icon} ${compactViews} 阅 · ${formattedHourlyRate}`;
+      if (vPeriod > 0) {
+        subText = vTot > vPeriod
+          ? `+${formatCompactNum(vPeriod)} (累计 +${formatCompactNum(vTot)})`
+          : `+${formatCompactNum(vPeriod)}`;
+      } else if (vTot > 0) {
+        subText = `累计 +${formatCompactNum(vTot)}`;
+      } else {
+        subText = `${intervalMinutes}m +0`;
+      }
     }
 
     return {
@@ -820,14 +834,36 @@
         e.stopPropagation();
       });
 
-      // Elevate stacking context of all ancestor elements so tweet text & video players stay behind
-      container.addEventListener('mouseenter', () => {
-        let parent = container.parentElement;
-        while (parent && parent !== document.body) {
-          parent.style.setProperty('z-index', '99999', 'important');
-          parent.style.setProperty('position', 'relative', 'important');
-          if (parent.tagName === 'ARTICLE') break;
-          parent = parent.parentElement;
+      // Elevate stacking context of all ancestor elements (including cellInnerDiv)
+      // so the card on short tweets floats cleanly above all subsequent tweets in the feed
+      let elevatedParents = [];
+
+      const elevateStackingContext = () => {
+        elevatedParents = [];
+        let curr = container.parentElement;
+        while (curr && curr !== document.body) {
+          elevatedParents.push({
+            el: curr,
+            prevZ: curr.style.zIndex,
+            prevPos: curr.style.position,
+            prevOverflow: curr.style.overflow
+          });
+          curr.style.setProperty('z-index', '999999', 'important');
+
+          const computedPos = window.getComputedStyle(curr).position;
+          if (computedPos === 'static') {
+            curr.style.setProperty('position', 'relative', 'important');
+          }
+
+          const computedStyle = window.getComputedStyle(curr);
+          if (computedStyle.overflow === 'hidden' || computedStyle.overflowY === 'hidden') {
+            curr.style.setProperty('overflow', 'visible', 'important');
+          }
+
+          if (curr.getAttribute('data-testid') === 'cellInnerDiv' || curr.getAttribute('data-testid') === 'primaryColumn') {
+            break;
+          }
+          curr = curr.parentElement;
         }
 
         const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
@@ -856,16 +892,31 @@
             tooltipEl.style.transform = `translateX(${shiftLeft}px)`;
           }
         }
-      });
+      };
 
-      container.addEventListener('mouseleave', () => {
-        let parent = container.parentElement;
-        while (parent && parent !== document.body) {
-          parent.style.removeProperty('z-index');
-          if (parent.tagName === 'ARTICLE') break;
-          parent = parent.parentElement;
+      const restoreStackingContext = () => {
+        for (const item of elevatedParents) {
+          if (item.prevZ) {
+            item.el.style.zIndex = item.prevZ;
+          } else {
+            item.el.style.removeProperty('z-index');
+          }
+          if (item.prevPos) {
+            item.el.style.position = item.prevPos;
+          } else {
+            item.el.style.removeProperty('position');
+          }
+          if (item.prevOverflow) {
+            item.el.style.overflow = item.prevOverflow;
+          } else {
+            item.el.style.removeProperty('overflow');
+          }
         }
-      });
+        elevatedParents = [];
+      };
+
+      container.addEventListener('mouseenter', elevateStackingContext);
+      container.addEventListener('mouseleave', restoreStackingContext);
 
       if (mount.beforeElement && mount.beforeElement.parentElement === mount.parent) {
         mount.parent.insertBefore(container, mount.beforeElement);
