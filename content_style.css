@@ -19,25 +19,7 @@
 }
 
 .x-heat-pulse-badge-container:hover {
-  z-index: 999999 !important;
-}
-
-/* Stacking Context Elevation: Ensure tooltip floats OVER tweet text, videos, photos, and next tweets */
-div[data-testid="cellInnerDiv"]:has(.x-heat-pulse-badge-container:hover),
-div:has(> article .x-heat-pulse-badge-container:hover),
-article:has(.x-heat-pulse-badge-container:hover) {
-  z-index: 999999 !important;
-  position: relative !important;
-  overflow: visible !important;
-}
-
-div:has(> .x-heat-pulse-badge-container:hover),
-div:has(> * > .x-heat-pulse-badge-container:hover),
-div:has(> * > * > .x-heat-pulse-badge-container:hover),
-div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
-  z-index: 999999 !important;
-  position: relative !important;
-  overflow: visible !important;
+  opacity: 0.95;
 }
 
 /* 1. Pill Badge - Frosted Glass & Precision Borders */
