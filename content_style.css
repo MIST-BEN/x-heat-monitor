@@ -104,26 +104,26 @@
   font-weight: 500;
 }
 
-/* 2. Tooltip Card - Frosted OLED Glass & Refined Typography */
+/* 2. Tooltip Card - Linear / Stripe Minimalist Professional SaaS Design */
 .x-heat-pulse-tooltip {
   display: none;
   position: absolute;
   bottom: calc(100% + 10px);
   right: 0;
-  background: rgba(9, 14, 24, 0.96);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
-  padding: 12px 14px;
-  width: 356px;
+  background: #ffffff;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 18px 22px;
+  width: 500px;
   box-sizing: border-box;
-  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
   line-height: 1.45;
-  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(56, 189, 248, 0.08);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
   z-index: 999999;
   pointer-events: auto;
+  font-feature-settings: "tnum" on;
 }
 
 .x-heat-pulse-badge-container:hover .x-heat-pulse-tooltip {
@@ -132,102 +132,174 @@
 }
 
 .x-heat-pulse-tooltip-header {
-  font-weight: 700;
-  font-size: 12px;
-  color: #38bdf8;
-  padding-bottom: 7px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
+  margin-bottom: 4px;
+}
+
+.x-heat-pulse-tooltip-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.x-heat-pulse-tooltip-header .header-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.015em;
+}
+
+.x-heat-pulse-tooltip-header .header-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: #4b5563;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 1.5px 7px;
+  border-radius: 4px;
+  line-height: 1.35;
+}
+
+.x-heat-pulse-tooltip-header .header-right {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
   letter-spacing: -0.01em;
 }
 
 .x-heat-pulse-tooltip-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 8px;
-  font-size: 11px;
+  margin-top: 4px;
+  margin-bottom: 4px;
 }
 
 .x-heat-pulse-tooltip-table th {
-  color: #64748b;
-  font-weight: 600;
-  text-align: right;
-  padding: 3px 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 11px;
+  padding: 8px 4px;
+  border-bottom: 1px solid #f3f4f6;
+  letter-spacing: 0.01em;
 }
 
-.x-heat-pulse-tooltip-table th:first-child {
+.x-heat-pulse-tooltip-table th.col-left {
   text-align: left;
+  padding-left: 0;
+  width: 130px;
+}
+
+.x-heat-pulse-tooltip-table th.col-right {
+  text-align: right;
 }
 
 .x-heat-pulse-tooltip-table td {
-  padding: 5px 4px;
-  text-align: right;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  font-feature-settings: "tnum";
+  padding: 9.5px 4px;
+  font-size: 13px;
+  border-bottom: 1px solid #f3f4f6;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
 }
 
-.x-heat-pulse-tooltip-table td:first-child {
-  text-align: left;
-  color: #cbd5e1;
+.x-heat-pulse-tooltip-table tr:last-child td {
+  border-bottom: none;
+}
+
+.metric-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2937;
   font-weight: 500;
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.metric-icon {
+  width: 14px;
+  height: 14px;
+  stroke: #4b5563;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  flex-shrink: 0;
 }
 
 /* Metric Delta Badges inside Table */
-.x-val-pos {
-  display: inline-block;
-  background: rgba(16, 185, 129, 0.14);
-  color: #34d399;
-  font-weight: 700;
-  padding: 1px 5px;
+.val-highlight {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 1.5px 7px;
   border-radius: 4px;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  font-size: 10.5px;
+  font-weight: 600;
+  font-size: 12.5px;
+  letter-spacing: -0.01em;
 }
 
-.x-val-total {
-  display: inline-block;
-  background: rgba(56, 189, 248, 0.14);
-  color: #38bdf8;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 4px;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  font-size: 10.5px;
-}
-
-.x-val-speed {
-  display: inline-block;
-  color: #fbbf24;
-  font-weight: 700;
-  font-size: 10.5px;
-}
-
-.x-val-zero {
-  color: #475569;
-  font-weight: 500;
-}
-
-.x-val-raw {
-  color: #64748b;
-  font-size: 10.5px;
+.val-zero {
+  color: #9ca3af;
   font-weight: 400;
+}
+
+.val-total {
+  color: #111827;
+  font-weight: 600;
 }
 
 /* Footer & Reset Button */
 .x-heat-pulse-tooltip-footer {
-  font-size: 10px;
-  color: #64748b;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 7px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  padding-top: 13px;
+  margin-top: 4px;
+  border-top: 1px solid #f3f4f6;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.footer-baseline {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.x-heat-pulse-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  color: #374151;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+  letter-spacing: -0.01em;
+}
+
+.x-heat-pulse-reset-btn:hover {
+  background: #f9fafb;
+  border-color: #9ca3af;
+  color: #111827;
+}
+
+.x-heat-pulse-reset-btn:active {
+  background: #f3f4f6;
+}
   align-items: center;
 }
 

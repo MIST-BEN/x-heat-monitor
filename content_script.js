@@ -738,71 +738,95 @@
       const dt = info.dTot;
       const c = info.curr;
 
-      const formatVal = (val, isTotal = false) => {
+      const renderDelta = (val) => {
         if (val > 0) {
-          return `<span class="${isTotal ? 'x-val-total' : 'x-val-pos'}">+${val}</span>`;
+          return `<span class="val-highlight">+${val}</span>`;
         }
-        return `<span class="x-val-zero">+0</span>`;
+        return `<span class="val-zero">+0</span>`;
       };
 
-      const ownTag = info.isOwnTweet ? `<span style="font-size:9.5px; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:1px 5px; border-radius:4px; margin-left:6px;">我的专属帖子</span>` : '';
+      const ownTag = info.isOwnTweet ? `<span class="header-badge">我的专属帖子</span>` : '';
 
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
-          <span>📊 X 帖子热度时序追踪 ${ownTag}</span>
-          <span style="font-size:10px; color:#fbbf24; font-weight:700;">${info.pushStatus} · 均速 ${info.formattedHourlyRate}</span>
+          <div class="header-left">
+            <span class="header-title">X 帖子热度时序追踪</span>
+            ${ownTag}
+          </div>
+          <div class="header-right">
+            持续追踪 ${info.totalAgeStr}
+          </div>
         </div>
         <table class="x-heat-pulse-tooltip-table">
           <thead>
             <tr>
-              <th>互动指标</th>
-              <th>近${info.intervalMinutes}分增量</th>
-              <th>监控累计</th>
-              <th>时均增速</th>
-              <th>当前总量</th>
+              <th class="col-left">互动指标</th>
+              <th class="col-right">近${info.intervalPeriodStr || 3}分钟增量</th>
+              <th class="col-right">监控累计增量</th>
+              <th class="col-right">当前总量</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td>👁️ 曝光浏览</td>
-              <td>${formatVal(dp.views)}</td>
-              <td>${formatVal(dt.views, true)}</td>
-              <td class="x-val-speed">${info.formattedHourlyRate}</td>
-              <td class="x-val-raw" style="font-weight:700; color:#38bdf8;">${c.views}</td>
+              <td>
+                <div class="metric-name-wrap">
+                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  <span>曝光浏览</span>
+                </div>
+              </td>
+              <td class="col-right">${renderDelta(dp.views)}</td>
+              <td class="col-right">${renderDelta(dt.views)}</td>
+              <td class="col-right val-total">${c.views}</td>
             </tr>
             <tr>
-              <td>❤️ 获得点赞</td>
-              <td>${formatVal(dp.likes)}</td>
-              <td>${formatVal(dt.likes, true)}</td>
-              <td class="x-val-speed">${info.hourlyLikesRate}/h</td>
-              <td class="x-val-raw">${c.likes}</td>
+              <td>
+                <div class="metric-name-wrap">
+                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+                  <span>获得点赞</span>
+                </div>
+              </td>
+              <td class="col-right">${renderDelta(dp.likes)}</td>
+              <td class="col-right">${renderDelta(dt.likes)}</td>
+              <td class="col-right val-total">${c.likes}</td>
             </tr>
             <tr>
-              <td>🔁 转发推文</td>
-              <td>${formatVal(dp.retweets)}</td>
-              <td>${formatVal(dt.retweets, true)}</td>
-              <td class="x-val-speed">${info.hourlyRtsRate}/h</td>
-              <td class="x-val-raw">${c.retweets}</td>
+              <td>
+                <div class="metric-name-wrap">
+                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="m7 23-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                  <span>转发推文</span>
+                </div>
+              </td>
+              <td class="col-right">${renderDelta(dp.retweets)}</td>
+              <td class="col-right">${renderDelta(dt.retweets)}</td>
+              <td class="col-right val-total">${c.retweets}</td>
             </tr>
             <tr>
-              <td>💬 参与回复</td>
-              <td>${formatVal(dp.replies)}</td>
-              <td>${formatVal(dt.replies, true)}</td>
-              <td class="x-val-speed">${info.hourlyRepliesRate}/h</td>
-              <td class="x-val-raw">${c.replies}</td>
+              <td>
+                <div class="metric-name-wrap">
+                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                  <span>参与回复</span>
+                </div>
+              </td>
+              <td class="col-right">${renderDelta(dp.replies)}</td>
+              <td class="col-right">${renderDelta(dt.replies)}</td>
+              <td class="col-right val-total">${c.replies}</td>
             </tr>
             <tr>
-              <td>🔖 书签收藏</td>
-              <td>${formatVal(dp.bookmarks)}</td>
-              <td>${formatVal(dt.bookmarks, true)}</td>
-              <td class="x-val-speed">${info.hourlyBookmarksRate}/h</td>
-              <td class="x-val-raw">${c.bookmarks}</td>
+              <td>
+                <div class="metric-name-wrap">
+                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+                  <span>书签收藏</span>
+                </div>
+              </td>
+              <td class="col-right">${renderDelta(dp.bookmarks)}</td>
+              <td class="col-right">${renderDelta(dt.bookmarks)}</td>
+              <td class="col-right val-total">${c.bookmarks}</td>
             </tr>
           </tbody>
         </table>
         <div class="x-heat-pulse-tooltip-footer">
-          <span>发布于: ${info.publishAgeStr}前 · 首次基准: ${info.firstMetrics.views || 0} 阅</span>
-          <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">🔄 重设此帖基准</button>
+          <span class="footer-benchmark">首次捕获基准：${info.firstMetrics.views || 0} 阅（${info.firstSeenDateStr}）</span>
+          <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">↻ 重设此帖基准</button>
         </div>
       `;
 
