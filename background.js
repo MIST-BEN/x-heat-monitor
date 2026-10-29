@@ -115,15 +115,19 @@ async function executePollingCycle(source = "SCHEDULED") {
     const allRecords = Object.values(tweetRecords);
     const ownRecords = allRecords.filter(t => t.isOwnTweet || (myHandle && t.author && t.author.toLowerCase() === myHandle));
 
-    // Calculate view increments specifically for user's own posts
+    // Calculate view totals and increments specifically for user's own posts
+    let totalOwnViews = 0;
     let totalOwnViewsDelta = 0;
-    const targetIntervalMs = (config.intervalMinutes || 3) * 60 * 1000;
+    let totalLifetimeDelta = 0;
+    const intervalMinutes = config.intervalMinutes || 3;
+    const targetIntervalMs = intervalMinutes * 60 * 1000;
 
     if (ownRecords.length > 0) {
       for (const item of ownRecords) {
         const snaps = item.snapshots || [];
         if (snaps.length > 0) {
           const curr = snaps[snaps.length - 1];
+          const first = item.firstSeenMetrics || snaps[0];
           let baseSnap = snaps[0];
           let minDiff = Infinity;
           for (const s of snaps) {
@@ -134,20 +138,25 @@ async function executePollingCycle(source = "SCHEDULED") {
             }
           }
           const dViews = Math.max(0, (curr.views || 0) - (baseSnap.views || 0));
+          const dLife = Math.max(0, (curr.views || 0) - (first.views || 0));
+          totalOwnViews += (curr.views || 0);
           totalOwnViewsDelta += dViews;
+          totalLifetimeDelta += dLife;
         }
       }
     }
 
-    // Update Chrome toolbar badge icon: exclusively tracks own posts' view increments
-    updateToolbarBadge(totalOwnViewsDelta, ownRecords.length > 0);
+    // Update Chrome toolbar badge icon: displays live delta if positive, or total views if steady
+    updateToolbarBadge(totalOwnViewsDelta, totalOwnViews, totalLifetimeDelta, ownRecords.length > 0, myHandle, intervalMinutes);
 
     // Save polling status
     await chrome.storage.local.set({
       last_poll_status: {
         success: true,
         timestamp,
+        totalOwnViews,
         totalOwnViewsDelta,
+        totalLifetimeDelta,
         monitoredOwnCount: ownRecords.length
       }
     });
@@ -157,7 +166,7 @@ async function executePollingCycle(source = "SCHEDULED") {
       triggerNotification(totalOwnViewsDelta, ownRecords[0]);
     }
 
-    return { totalOwnViewsDelta, ownRecordsCount: ownRecords.length };
+    return { totalOwnViews, totalOwnViewsDelta, totalLifetimeDelta, ownRecordsCount: ownRecords.length };
   } catch (error) {
     console.error("[X-Heat-Pulse] Polling cycle failed:", error);
     chrome.action.setBadgeText({ text: "ERR" });
@@ -166,10 +175,11 @@ async function executePollingCycle(source = "SCHEDULED") {
   }
 }
 
-// 5. Update Action Badge UI (Exclusively displays user's own post view increments)
-function updateToolbarBadge(viewsDelta, hasOwnPosts) {
+// 5. Update Action Badge UI (Exclusively displays user's own post view metrics)
+function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, hasOwnPosts, myHandle = "sben96001", intervalMinutes = 3) {
   if (!hasOwnPosts) {
     chrome.action.setBadgeText({ text: "" });
+    chrome.action.setTitle({ title: `X Heat Pulse: 正在等待检测 @${myHandle} 的推文` });
     return;
   }
   if (viewsDelta > 0) {
@@ -181,9 +191,15 @@ function updateToolbarBadge(viewsDelta, hasOwnPosts) {
       chrome.action.setBadgeBackgroundColor({ color: "#10B981" }); // Emerald green
     }
   } else {
-    chrome.action.setBadgeText({ text: "0" });
-    chrome.action.setBadgeBackgroundColor({ color: "#64748B" }); // Neutral slate
+    // Show total views instead of misleading 0 to eliminate false perception of data loss!
+    const text = totalOwnViews > 9999 ? `${(totalOwnViews / 1000).toFixed(1)}k` : `${totalOwnViews}`;
+    chrome.action.setBadgeText({ text });
+    chrome.action.setBadgeBackgroundColor({ color: "#334155" }); // Neutral slate dark
   }
+
+  chrome.action.setTitle({
+    title: `X Heat Pulse 监控中心 (@${myHandle})\n当前总浏览: ${totalOwnViews} 次\n近${intervalMinutes}分钟增量: +${viewsDelta} 次\n监控累计增量: +${totalLifetimeDelta} 次`
+  });
 }
 
 // 6. Trigger Chrome Notification for traffic spikes

@@ -211,7 +211,11 @@ async function renderData() {
   if (tweetList.length === 0) {
     document.getElementById("status-tag").textContent = "等待页面数据";
     document.getElementById("status-tag").className = "tag";
+    const totalViewsEl = document.getElementById("total-views");
+    if (totalViewsEl) totalViewsEl.textContent = "0";
     document.getElementById("delta-heat").textContent = "+0";
+    const deltaTotEl = document.getElementById("delta-total");
+    if (deltaTotEl) deltaTotEl.textContent = "+0";
     document.getElementById("delta-rate").textContent = "未检测到推文";
     document.getElementById("monitored-count").textContent = "监控中: 0";
     document.getElementById("posts-container").innerHTML = `
@@ -229,16 +233,20 @@ async function renderData() {
   if (currentTab === "own" && ownTweets.length === 0) {
     document.getElementById("status-tag").textContent = "专属监控中";
     document.getElementById("status-tag").className = "tag live";
+    const totalViewsEl = document.getElementById("total-views");
+    if (totalViewsEl) totalViewsEl.textContent = "0";
     document.getElementById("delta-heat").textContent = "+0";
+    const deltaTotEl = document.getElementById("delta-total");
+    if (deltaTotEl) deltaTotEl.textContent = "+0";
     document.getElementById("delta-rate").textContent = "等待主页浏览";
     document.getElementById("monitored-count").textContent = "我的帖子: 0";
 
     // Zero out grid
-    document.getElementById("d-likes").textContent = "+0";
-    document.getElementById("d-rts").textContent = "+0";
-    document.getElementById("d-replies").textContent = "+0";
-    document.getElementById("d-bookmarks").textContent = "+0";
-    document.getElementById("d-views").textContent = "+0";
+    document.getElementById("d-likes").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
+    document.getElementById("d-rts").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
+    document.getElementById("d-replies").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
+    document.getElementById("d-bookmarks").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
+    document.getElementById("d-views").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
 
     document.getElementById("posts-container").innerHTML = `
       <div style="background:rgba(56,189,248,0.06); border:1px dashed rgba(56,189,248,0.25); border-radius:10px; padding:16px 12px; text-align:center; color:#94a3b8; font-size:11px; line-height:1.7;">
@@ -290,10 +298,17 @@ async function renderData() {
   document.getElementById("status-tag").textContent = `${intervalM}m 实时监控中`;
   document.getElementById("status-tag").className = "tag live";
 
-  // Aggregate Deltas across targetList
+  // Aggregate Totals & Deltas across targetList
+  let totalViews = 0;
   let totalDeltaViews = 0;
-  let totalDeltaLikes = 0;
-  const totalBreakdown = { views: 0, likes: 0, retweets: 0, replies: 0, bookmarks: 0 };
+  let totalLifetimeDeltaViews = 0;
+  const totalBreakdown = {
+    views: 0, viewsTotal: 0,
+    likes: 0, likesTotal: 0,
+    retweets: 0, retweetsTotal: 0,
+    replies: 0, repliesTotal: 0,
+    bookmarks: 0, bookmarksTotal: 0
+  };
   const targetIntervalMs = intervalM * 60 * 1000;
   const now = Date.now();
 
@@ -337,14 +352,24 @@ async function renderData() {
       bookmarks: Math.max(0, curr.bookmarks - first.bookmarks)
     };
 
-    totalBreakdown.views += dPeriod.views;
-    totalBreakdown.likes += dPeriod.likes;
-    totalBreakdown.retweets += dPeriod.retweets;
-    totalBreakdown.replies += dPeriod.replies;
-    totalBreakdown.bookmarks += dPeriod.bookmarks;
-
+    totalViews += (curr.views || 0);
     totalDeltaViews += dPeriod.views;
-    totalDeltaLikes += dPeriod.likes;
+    totalLifetimeDeltaViews += dTot.views;
+
+    totalBreakdown.views += dPeriod.views;
+    totalBreakdown.viewsTotal += (curr.views || 0);
+
+    totalBreakdown.likes += dPeriod.likes;
+    totalBreakdown.likesTotal += (curr.likes || 0);
+
+    totalBreakdown.retweets += dPeriod.retweets;
+    totalBreakdown.retweetsTotal += (curr.retweets || 0);
+
+    totalBreakdown.replies += dPeriod.replies;
+    totalBreakdown.repliesTotal += (curr.replies || 0);
+
+    totalBreakdown.bookmarks += dPeriod.bookmarks;
+    totalBreakdown.bookmarksTotal += (curr.bookmarks || 0);
 
     activeTweets.push({
       id: tweet.id,
@@ -358,10 +383,15 @@ async function renderData() {
     });
   }
 
-  // Hero Card Summary: Exclusively show own view increment
-  document.getElementById("delta-heat").textContent = totalDeltaViews > 0
-    ? `+${totalDeltaViews}`
-    : `0`;
+  // Hero Card Summary: Shows Total Views + 3m Delta + Lifetime Delta
+  const totalViewsEl = document.getElementById("total-views");
+  if (totalViewsEl) totalViewsEl.textContent = formatNumber(totalViews);
+
+  const deltaHeatEl = document.getElementById("delta-heat");
+  if (deltaHeatEl) deltaHeatEl.textContent = `+${totalDeltaViews}`;
+
+  const deltaTotEl = document.getElementById("delta-total");
+  if (deltaTotEl) deltaTotEl.textContent = `+${totalLifetimeDeltaViews}`;
   
   const rateEl = document.getElementById("delta-rate");
   if (totalDeltaViews >= 50) {
@@ -378,12 +408,12 @@ async function renderData() {
     rateEl.style.color = "#94a3b8";
   }
 
-  // Breakdown
-  document.getElementById("d-likes").textContent = `+${totalBreakdown.likes}`;
-  document.getElementById("d-rts").textContent = `+${totalBreakdown.retweets}`;
-  document.getElementById("d-replies").textContent = `+${totalBreakdown.replies}`;
-  document.getElementById("d-bookmarks").textContent = `+${totalBreakdown.bookmarks}`;
-  document.getElementById("d-views").textContent = `+${totalBreakdown.views}`;
+  // Breakdown with Total and (+Delta)
+  document.getElementById("d-likes").innerHTML = `${formatNumber(totalBreakdown.likesTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.likes})</span>`;
+  document.getElementById("d-rts").innerHTML = `${formatNumber(totalBreakdown.retweetsTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.retweets})</span>`;
+  document.getElementById("d-replies").innerHTML = `${formatNumber(totalBreakdown.repliesTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.replies})</span>`;
+  document.getElementById("d-bookmarks").innerHTML = `${formatNumber(totalBreakdown.bookmarksTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.bookmarks})</span>`;
+  document.getElementById("d-views").innerHTML = `${formatNumber(totalBreakdown.viewsTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.views})</span>`;
 
   // Time
   document.getElementById("last-update").textContent = `更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
@@ -413,8 +443,8 @@ function renderPostsList(tweets, intervalM = 3) {
     card.innerHTML = `
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
-        <span class="post-delta" style="color: #34d399;">${intervalM}m 阅: <b>+${dp.views || 0}</b> | 累计 阅: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
+        <span>👁️ <b>${formatNumber(c.views)}</b> 总阅 · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
+        <span class="post-delta" style="color: #34d399;">${intervalM}m: <b>+${dp.views || 0}</b> | 累计: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
       </div>
     `;
     container.appendChild(card);

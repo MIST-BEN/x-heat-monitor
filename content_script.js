@@ -414,6 +414,22 @@
           ? author.toLowerCase() === savedHandle.toLowerCase()
           : false;
 
+        // Monotonic hydration guard: if tweet was previously recorded with positive metrics,
+        // do NOT allow unhydrated 0s during page reload to overwrite real values!
+        const existingRecord = tweetRecords[tweetId];
+        if (existingRecord) {
+          const lastSnap = existingRecord.snapshots && existingRecord.snapshots.length > 0
+            ? existingRecord.snapshots[existingRecord.snapshots.length - 1]
+            : null;
+          if (lastSnap) {
+            if (metrics.views === 0 && lastSnap.views > 0) metrics.views = lastSnap.views;
+            if (metrics.likes === 0 && lastSnap.likes > 0) metrics.likes = lastSnap.likes;
+            if (metrics.retweets === 0 && lastSnap.retweets > 0) metrics.retweets = lastSnap.retweets;
+            if (metrics.replies === 0 && lastSnap.replies > 0) metrics.replies = lastSnap.replies;
+            if (metrics.bookmarks === 0 && lastSnap.bookmarks > 0) metrics.bookmarks = lastSnap.bookmarks;
+          }
+        }
+
         // 1. Initial Baseline: First time user views this tweet
         if (!tweetRecords[tweetId]) {
           tweetRecords[tweetId] = {
@@ -428,6 +444,24 @@
             ]
           };
           hasNewRecords = true;
+        } else {
+          // If baseline was initially captured as 0 before React hydration, promote to first positive value
+          const rec = tweetRecords[tweetId];
+          if (rec.firstSeenMetrics && rec.firstSeenMetrics.views === 0 && metrics.views > 0) {
+            rec.firstSeenMetrics.views = metrics.views;
+            rec.firstSeenMetrics.likes = rec.firstSeenMetrics.likes || metrics.likes;
+            rec.firstSeenMetrics.retweets = rec.firstSeenMetrics.retweets || metrics.retweets;
+            rec.firstSeenMetrics.replies = rec.firstSeenMetrics.replies || metrics.replies;
+            rec.firstSeenMetrics.bookmarks = rec.firstSeenMetrics.bookmarks || metrics.bookmarks;
+            if (rec.snapshots && rec.snapshots[0] && rec.snapshots[0].views === 0) {
+              rec.snapshots[0].views = metrics.views;
+              rec.snapshots[0].likes = rec.snapshots[0].likes || metrics.likes;
+              rec.snapshots[0].retweets = rec.snapshots[0].retweets || metrics.retweets;
+              rec.snapshots[0].replies = rec.snapshots[0].replies || metrics.replies;
+              rec.snapshots[0].bookmarks = rec.snapshots[0].bookmarks || metrics.bookmarks;
+            }
+            hasNewRecords = true;
+          }
         }
 
         const record = tweetRecords[tweetId];
@@ -547,9 +581,10 @@
       bookmarks: Math.max(0, currMetrics.bookmarks - (basePeriodSnapshot.bookmarks || 0))
     };
 
-    // --- 3. Determine Pill Text & Style (Focused exclusively on VIEW count increments) ---
+    // --- 3. Determine Pill Text & Style (Focused on Total Views + Increments) ---
     const vPeriod = dPeriod.views || 0;
     const vTot = dTot.views || 0;
+    const vCurr = currMetrics.views || 0;
 
     let pillClass = "steady";
     let icon = "☕";
@@ -568,10 +603,10 @@
     if (isNew) {
       pillClass = "recording";
       icon = "⏱️";
-      mainText = "初始记录中";
-      subText = "基准已锁定";
+      mainText = `${icon} ${vCurr} 阅 · 基准已锁定`;
+      subText = `${intervalMinutes}m 增量待更新`;
     } else {
-      mainText = `${icon} ${intervalMinutes}m +${vPeriod}`;
+      mainText = `${icon} ${vCurr} 阅 · ${intervalMinutes}m +${vPeriod}`;
       subText = `累计 +${vTot}`;
     }
 
@@ -667,8 +702,8 @@
           <thead>
             <tr>
               <th>互动指标</th>
-              <th>近${info.intervalMinutes}分钟</th>
-              <th>首次至今</th>
+              <th>近${info.intervalMinutes}分钟增量</th>
+              <th>监控累计增量</th>
               <th>当前总量</th>
             </tr>
           </thead>
@@ -677,7 +712,7 @@
               <td>👁️ 曝光浏览</td>
               <td>${formatVal(dp.views)}</td>
               <td>${formatVal(dt.views, true)}</td>
-              <td class="x-val-raw">${c.views}</td>
+              <td class="x-val-raw" style="font-weight:700; color:#38bdf8;">${c.views}</td>
             </tr>
             <tr>
               <td>❤️ 获得点赞</td>
@@ -706,7 +741,7 @@
           </tbody>
         </table>
         <div class="x-heat-pulse-tooltip-footer">
-          <span>首次捕获: ${info.firstSeenDateStr}</span>
+          <span>首次捕获基准: ${info.firstMetrics.views || 0} 阅 (${info.firstSeenDateStr})</span>
           <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">🔄 重设此帖基准</button>
         </div>
       `;
