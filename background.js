@@ -29,7 +29,9 @@ chrome.runtime.onInstalled.addListener(async () => {
   setupAlarm(DEFAULT_CONFIG.intervalMinutes);
 
   // Trigger immediate sample
-  setTimeout(() => executeCycle("INSTALL_INIT"), 1000);
+  executePollingCycle("INSTALL_INIT").catch(err => {
+    console.warn("[X-Heat-Pulse] Initial sample notice:", err);
+  });
 });
 
 // Setup or update alarm
@@ -251,9 +253,14 @@ async function fetchXMetrics(config) {
     return await fetchViaOfficialAPI(config.apiToken.trim());
   }
 
-  // Method 2: Inspect active cookies on x.com
-  const ct0Cookie = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
-  const authTokenCookie = await chrome.cookies.get({ url: "https://x.com", name: "auth_token" });
+  // Method 2: Inspect active cookies on x.com or twitter.com
+  let ct0Cookie = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
+  let authTokenCookie = await chrome.cookies.get({ url: "https://x.com", name: "auth_token" });
+
+  if (!ct0Cookie || !authTokenCookie) {
+    ct0Cookie = await chrome.cookies.get({ url: "https://twitter.com", name: "ct0" });
+    authTokenCookie = await chrome.cookies.get({ url: "https://twitter.com", name: "auth_token" });
+  }
 
   if (ct0Cookie && authTokenCookie) {
     try {
