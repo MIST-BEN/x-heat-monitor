@@ -369,6 +369,7 @@
 
       container.innerHTML = `
         <div class="x-heat-pulse-pill ${info.pillClass}">
+          <span class="x-heat-pulse-dot"></span>
           <span class="x-heat-pulse-main">${info.mainText}</span>
           <span class="x-heat-pulse-divider"></span>
           <span class="x-heat-pulse-sub">${info.subText}</span>
@@ -412,10 +413,17 @@
       const dt = info.dTot;
       const c = info.curr;
 
+      const formatVal = (val, isTotal = false) => {
+        if (val > 0) {
+          return `<span class="${isTotal ? 'x-val-total' : 'x-val-pos'}">+${val}</span>`;
+        }
+        return `<span class="x-val-zero">+0</span>`;
+      };
+
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
           <span>📊 X 帖子热度时序追踪</span>
-          <span style="font-size:10px; color:#71767b;">已监控 ${info.totalAgeStr}</span>
+          <span style="font-size:10px; color:#64748b;">已持续追踪 ${info.totalAgeStr}</span>
         </div>
         <table class="x-heat-pulse-tooltip-table">
           <thead>
@@ -429,39 +437,39 @@
           <tbody>
             <tr>
               <td>👁️ 曝光浏览</td>
-              <td class="${dp.views > 0 ? 'pos' : 'neutral'}">+${dp.views}</td>
-              <td class="${dt.views > 0 ? 'total' : 'neutral'}">+${dt.views}</td>
-              <td class="raw">${c.views}</td>
+              <td>${formatVal(dp.views)}</td>
+              <td>${formatVal(dt.views, true)}</td>
+              <td class="x-val-raw">${c.views}</td>
             </tr>
             <tr>
               <td>❤️ 获得点赞</td>
-              <td class="${dp.likes > 0 ? 'pos' : 'neutral'}">+${dp.likes}</td>
-              <td class="${dt.likes > 0 ? 'total' : 'neutral'}">+${dt.likes}</td>
-              <td class="raw">${c.likes}</td>
+              <td>${formatVal(dp.likes)}</td>
+              <td>${formatVal(dt.likes, true)}</td>
+              <td class="x-val-raw">${c.likes}</td>
             </tr>
             <tr>
               <td>🔁 转发推文</td>
-              <td class="${dp.retweets > 0 ? 'pos' : 'neutral'}">+${dp.retweets}</td>
-              <td class="${dt.retweets > 0 ? 'total' : 'neutral'}">+${dt.retweets}</td>
-              <td class="raw">${c.retweets}</td>
+              <td>${formatVal(dp.retweets)}</td>
+              <td>${formatVal(dt.retweets, true)}</td>
+              <td class="x-val-raw">${c.retweets}</td>
             </tr>
             <tr>
               <td>💬 参与回复</td>
-              <td class="${dp.replies > 0 ? 'pos' : 'neutral'}">+${dp.replies}</td>
-              <td class="${dt.replies > 0 ? 'total' : 'neutral'}">+${dt.replies}</td>
-              <td class="raw">${c.replies}</td>
+              <td>${formatVal(dp.replies)}</td>
+              <td>${formatVal(dt.replies, true)}</td>
+              <td class="x-val-raw">${c.replies}</td>
             </tr>
             <tr>
               <td>🔖 书签收藏</td>
-              <td class="${dp.bookmarks > 0 ? 'pos' : 'neutral'}">+${dp.bookmarks}</td>
-              <td class="${dt.bookmarks > 0 ? 'total' : 'neutral'}">+${dt.bookmarks}</td>
-              <td class="raw">${c.bookmarks}</td>
+              <td>${formatVal(dp.bookmarks)}</td>
+              <td>${formatVal(dt.bookmarks, true)}</td>
+              <td class="x-val-raw">${c.bookmarks}</td>
             </tr>
           </tbody>
         </table>
         <div class="x-heat-pulse-tooltip-footer">
-          <span>首次看到: ${info.firstSeenDateStr}</span>
-          <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">🔄 重置基准</button>
+          <span>首次捕获: ${info.firstSeenDateStr}</span>
+          <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">🔄 重设此帖基准</button>
         </div>
       `;
 
