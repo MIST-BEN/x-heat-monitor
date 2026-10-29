@@ -781,8 +781,16 @@
         e.stopPropagation();
       });
 
-      // Smart flip: flip tooltip upwards if near bottom of window
+      // Elevate stacking context of all ancestor elements so tweet text & video players stay behind
       container.addEventListener('mouseenter', () => {
+        let parent = container.parentElement;
+        while (parent && parent !== document.body) {
+          parent.style.setProperty('z-index', '99999', 'important');
+          parent.style.setProperty('position', 'relative', 'important');
+          if (parent.tagName === 'ARTICLE') break;
+          parent = parent.parentElement;
+        }
+
         const rect = container.getBoundingClientRect();
         const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
         if (tooltipEl) {
@@ -792,6 +800,15 @@
           } else {
             tooltipEl.classList.remove('flipped');
           }
+        }
+      });
+
+      container.addEventListener('mouseleave', () => {
+        let parent = container.parentElement;
+        while (parent && parent !== document.body) {
+          parent.style.removeProperty('z-index');
+          if (parent.tagName === 'ARTICLE') break;
+          parent = parent.parentElement;
         }
       });
 

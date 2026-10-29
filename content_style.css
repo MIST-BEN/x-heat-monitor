@@ -19,7 +19,21 @@
 }
 
 .x-heat-pulse-badge-container:hover {
-  z-index: 99999;
+  z-index: 999999 !important;
+}
+
+/* Stacking Context Elevation: Ensure tooltip floats OVER tweet text, videos, photos, and next tweets */
+article:has(.x-heat-pulse-badge-container:hover) {
+  z-index: 99990 !important;
+  position: relative !important;
+}
+
+div:has(> .x-heat-pulse-badge-container:hover),
+div:has(> * > .x-heat-pulse-badge-container:hover),
+div:has(> * > * > .x-heat-pulse-badge-container:hover),
+div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
+  z-index: 99999 !important;
+  position: relative !important;
 }
 
 /* 1. Pill Badge - Frosted Glass & Precision Borders */
@@ -117,18 +131,19 @@
   top: calc(100% + 8px);
   bottom: auto;
   right: 0;
-  background: #ffffff;
-  color: #111827;
+  background: #ffffff !important;
+  color: #111827 !important;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
   padding: 18px 22px;
   width: 520px;
+  max-width: calc(100vw - 32px);
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 13px;
   line-height: 1.45;
-  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.08), 0 2px 6px -1px rgba(0, 0, 0, 0.04);
-  z-index: 999999;
+  box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.2), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
+  z-index: 999999 !important;
   pointer-events: auto;
   font-feature-settings: "tnum" on;
 }
