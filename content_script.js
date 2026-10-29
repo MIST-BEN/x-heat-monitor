@@ -363,20 +363,20 @@
       bookmarks: Math.max(0, currMetrics.bookmarks - (basePeriodSnapshot.bookmarks || 0))
     };
 
-    // --- 3. Determine Pill Text & Style ---
+    // --- 3. Determine Pill Text & Style (Focused exclusively on VIEW count increments) ---
+    const vPeriod = dPeriod.views || 0;
+    const vTot = dTot.views || 0;
+
     let pillClass = "steady";
     let icon = "☕";
 
-    if (dPeriod.likes > 0 || dPeriod.retweets > 0 || dPeriod.views >= 30) {
+    if (vPeriod >= 50) {
       pillClass = "hot";
       icon = "🔥";
-    } else if (dPeriod.views > 0 || dTot.views > 0 || dTot.likes > 0) {
+    } else if (vPeriod > 0 || vTot > 0) {
       pillClass = "growing";
       icon = "⚡";
     }
-
-    let summaryPeriod = formatDeltaSummary(dPeriod);
-    let summaryTot = formatDeltaSummary(dTot);
 
     let mainText = "";
     let subText = "";
@@ -387,8 +387,8 @@
       mainText = "初始记录中";
       subText = "基准已锁定";
     } else {
-      mainText = `${icon} ${intervalMinutes}m: ${summaryPeriod}`;
-      subText = `总: ${summaryTot}`;
+      mainText = `${icon} ${intervalMinutes}m +${vPeriod}`;
+      subText = `累计 +${vTot}`;
     }
 
     return {

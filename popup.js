@@ -276,21 +276,11 @@ function renderPostsList(tweets, intervalM = 3) {
     const dp = t.dPeriod || {};
     const dt = t.dTot || {};
 
-    let dpStr = [];
-    if (dp.likes > 0) dpStr.push(`赞+${dp.likes}`);
-    if (dp.views > 0) dpStr.push(`阅+${dp.views}`);
-    const dpText = dpStr.length > 0 ? dpStr.join(" ") : "0";
-
-    let totStr = [];
-    if (dt.likes > 0) totStr.push(`赞+${dt.likes}`);
-    if (dt.views > 0) totStr.push(`阅+${dt.views}`);
-    const totText = totStr.length > 0 ? totStr.join(" ") : "0";
-
     card.innerHTML = `
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
         <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)}</span>
-        <span class="post-delta" style="color: #34d399;">${intervalM}m: <b>${dpText}</b> | 累计: <b style="color:#38bdf8;">${totText}</b></span>
+        <span class="post-delta" style="color: #34d399;">${intervalM}m 阅: <b>+${dp.views || 0}</b> | 累计 阅: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
       </div>
     `;
     container.appendChild(card);
