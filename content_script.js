@@ -26,13 +26,71 @@
   const DEFAULT_INTERVAL_MINUTES = 3;
   let isScanning = false;
   let scanTimeout = null;
+  let scanInterval = null;
+  let observer = null;
   let myHandle = null;
 
   function isExtensionValid() {
-    return typeof chrome !== 'undefined' && chrome.runtime && !!chrome.runtime.id;
+    try {
+      return (
+        typeof chrome !== 'undefined' &&
+        !!chrome.runtime &&
+        !!chrome.runtime.id &&
+        !!chrome.storage &&
+        !!chrome.storage.local
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function cleanupOnInvalidation() {
+    if (scanInterval) {
+      clearInterval(scanInterval);
+      scanInterval = null;
+    }
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (scanTimeout) {
+      clearTimeout(scanTimeout);
+      scanTimeout = null;
+    }
+  }
+
+  async function safeStorageGet(keys) {
+    if (!isExtensionValid()) {
+      cleanupOnInvalidation();
+      return null;
+    }
+    try {
+      return await chrome.storage.local.get(keys);
+    } catch (e) {
+      cleanupOnInvalidation();
+      return null;
+    }
+  }
+
+  async function safeStorageSet(items) {
+    if (!isExtensionValid()) {
+      cleanupOnInvalidation();
+      return false;
+    }
+    try {
+      await chrome.storage.local.set(items);
+      return true;
+    } catch (e) {
+      cleanupOnInvalidation();
+      return false;
+    }
   }
 
   function scheduleScan() {
+    if (!isExtensionValid()) {
+      cleanupOnInvalidation();
+      return;
+    }
     if (scanTimeout) clearTimeout(scanTimeout);
     scanTimeout = setTimeout(processAllVisibleTweets, 200);
   }
@@ -318,7 +376,11 @@
       const detected = detectMyHandle();
 
       // Fetch stored tweet records and config
-      const storage = await chrome.storage.local.get(["tweet_records", "config", "my_user_handle"]);
+      const storage = await safeStorageGet(["tweet_records", "config", "my_user_handle"]);
+      if (!storage) {
+        isScanning = false;
+        return;
+      }
       const tweetRecords = storage.tweet_records || {};
       const config = storage.config || { intervalMinutes: DEFAULT_INTERVAL_MINUTES };
       const intervalMinutes = config.intervalMinutes || DEFAULT_INTERVAL_MINUTES;
@@ -329,14 +391,14 @@
       let hasNewRecords = false;
 
       if (!storage.my_user_handle) {
-        await chrome.storage.local.set({ my_user_handle: savedHandle });
+        await safeStorageSet({ my_user_handle: savedHandle });
         hasNewRecords = true;
       }
 
       if (detected && detected.toLowerCase() !== savedHandle.toLowerCase()) {
         savedHandle = detected;
         myHandle = detected;
-        await chrome.storage.local.set({ my_user_handle: detected });
+        await safeStorageSet({ my_user_handle: detected });
         console.log(`[X-Heat-Pulse] Logged-in creator account identified: @${detected}`);
         hasNewRecords = true;
       }
@@ -425,14 +487,14 @@
           });
           const trimmed = {};
           tweetKeys.slice(0, 350).forEach(k => { trimmed[k] = tweetRecords[k]; });
-          await chrome.storage.local.set({ tweet_records: trimmed });
+          await safeStorageSet({ tweet_records: trimmed });
         } else {
-          await chrome.storage.local.set({ tweet_records: tweetRecords });
+          await safeStorageSet({ tweet_records: tweetRecords });
         }
       }
     } catch (err) {
-      if (err.message && err.message.includes('Extension context invalidated')) {
-        // Quietly stop on reload
+      if (!isExtensionValid() || err.message?.includes('local') || err.message?.includes('Extension context invalidated')) {
+        cleanupOnInvalidation();
         return;
       }
       console.warn('[X-Heat-Pulse] Error during tweet scan:', err);
@@ -666,14 +728,15 @@
 
   async function resetTweetBaseline(tweetId, currentMetrics) {
     if (!isExtensionValid()) return;
-    const storage = await chrome.storage.local.get("tweet_records");
+    const storage = await safeStorageGet("tweet_records");
+    if (!storage) return;
     const tweetRecords = storage.tweet_records || {};
     if (tweetRecords[tweetId]) {
       const now = Date.now();
       tweetRecords[tweetId].firstSeenAt = now;
       tweetRecords[tweetId].firstSeenMetrics = { ...currentMetrics };
       tweetRecords[tweetId].snapshots = [{ t: now, ...currentMetrics }];
-      await chrome.storage.local.set({ tweet_records: tweetRecords });
+      await safeStorageSet({ tweet_records: tweetRecords });
       console.log(`[X-Heat-Pulse] Tweet ${tweetId} baseline reset.`);
       scheduleScan();
     }
@@ -696,7 +759,11 @@
   }
 
   // DOM Mutation Observer for infinite scroll
-  const observer = new MutationObserver((mutations) => {
+  observer = new MutationObserver((mutations) => {
+    if (!isExtensionValid()) {
+      cleanupOnInvalidation();
+      return;
+    }
     let hasRelevantMutation = false;
     for (const m of mutations) {
       if (m.addedNodes.length > 0) {
@@ -715,6 +782,6 @@
   });
 
   scheduleScan();
-  setInterval(scheduleScan, 5000);
+  scanInterval = setInterval(scheduleScan, 5000);
 
 })();

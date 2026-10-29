@@ -49,7 +49,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       refreshIcon.classList.add("spinning");
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0]?.id) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {});
+          chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
+            const _ = chrome.runtime.lastError;
+          });
         }
       });
 
@@ -140,13 +142,17 @@ async function bindHandleAndRetag(handle) {
   });
 
   // Notify background service worker to update polling & alarms
-  chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: newConfig }, () => {});
+  chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: newConfig }, () => {
+    const _ = chrome.runtime.lastError;
+  });
 
   // Notify active tabs
   chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
     tabs.forEach(tab => {
       if (tab.id) {
-        chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: clean }, () => {});
+        chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: clean }, () => {
+          const _ = chrome.runtime.lastError;
+        });
       }
     });
   });
@@ -256,7 +262,9 @@ async function renderData() {
       forceScanBtn.addEventListener("click", () => {
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
           if (tabs[0]?.id) {
-            chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {});
+            chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
+              const _ = chrome.runtime.lastError;
+            });
           }
         });
         setTimeout(renderData, 400);

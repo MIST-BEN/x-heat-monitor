@@ -61,13 +61,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
         tabs.forEach(tab => {
           if (tab.id) {
-            chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: cleanHandle }, () => {});
+            chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: cleanHandle }, () => {
+              const _ = chrome.runtime.lastError;
+            });
           }
         });
       });
     }
 
     chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: updated }, () => {
+      const _ = chrome.runtime.lastError;
       const msg = document.getElementById("status-msg");
       msg.style.display = "inline-block";
       setTimeout(() => {
