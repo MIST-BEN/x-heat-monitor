@@ -233,6 +233,68 @@
     return null;
   }
 
+  // Locate tweet header mount point (the red-box area in top right, immediately left of Grok / Caret ...)
+  function findTweetHeaderMountPoint(tweetArticle) {
+    const caret = tweetArticle.querySelector('[data-testid="caret"]');
+    const userName = tweetArticle.querySelector('[data-testid="User-Name"]');
+
+    if (caret && userName) {
+      // Find common ancestor row in header that contains both userName and caret
+      let headerRow = caret.parentElement;
+      while (headerRow && headerRow !== tweetArticle && !headerRow.contains(userName)) {
+        headerRow = headerRow.parentElement;
+      }
+
+      if (headerRow && headerRow !== tweetArticle) {
+        // Find which top-level direct child of headerRow contains caret
+        let rightActionChild = caret;
+        while (rightActionChild.parentElement && rightActionChild.parentElement !== headerRow) {
+          rightActionChild = rightActionChild.parentElement;
+        }
+
+        return {
+          parent: headerRow,
+          beforeElement: rightActionChild
+        };
+      }
+    }
+
+    if (caret) {
+      const parent = caret.parentElement || tweetArticle;
+      return {
+        parent,
+        beforeElement: caret
+      };
+    }
+
+    if (userName && userName.parentElement) {
+      return {
+        parent: userName.parentElement,
+        beforeElement: null
+      };
+    }
+
+    return null;
+  }
+
+  // Unified mount point resolver prioritizing header top-right, falling back to action bar
+  function findTweetMountPoint(tweetArticle) {
+    const headerMount = findTweetHeaderMountPoint(tweetArticle);
+    if (headerMount && headerMount.parent) {
+      return headerMount;
+    }
+
+    const actionGroup = findTweetActionGroup(tweetArticle);
+    if (actionGroup) {
+      return {
+        parent: actionGroup,
+        beforeElement: null
+      };
+    }
+
+    return null;
+  }
+
   // Extract tweet ID, author, and publication timestamp reliably
   function extractTweetIdentity(tweetArticle) {
     let tweetId = null;
@@ -520,8 +582,8 @@
         // 3. Compute Period Delta and Total Lifetime Delta
         const deltaInfo = computeDeltas(record, now, targetIntervalMs, metrics, intervalMinutes);
 
-        // 4. Inject or Update Badge
-        injectOrUpdateBadge(actionGroup, tweetId, deltaInfo, record);
+        // 4. Inject or Update Badge in top-right header location
+        injectOrUpdateBadge(article, tweetId, deltaInfo, record);
       });
 
       // Persist to local storage
@@ -683,9 +745,19 @@
     };
   }
 
-  // Inject or update in-page pill badge
-  function injectOrUpdateBadge(actionGroup, tweetId, info, record) {
-    let container = actionGroup.querySelector(`.x-heat-pulse-badge-container[data-id="${tweetId}"]`);
+  // Inject or update in-page pill badge (placed in top-right header, adjacent to caret)
+  function injectOrUpdateBadge(tweetArticle, tweetId, info, record) {
+    const mount = findTweetMountPoint(tweetArticle);
+    if (!mount || !mount.parent) return;
+
+    let container = tweetArticle.querySelector(`.x-heat-pulse-badge-container[data-id="${tweetId}"]`);
+
+    // Migration / Relocation Guard:
+    // If container exists but is not in the desired mount parent (e.g. was previously in bottom action bar), remove and remount
+    if (container && container.parentElement !== mount.parent) {
+      container.remove();
+      container = null;
+    }
 
     if (!container) {
       container = document.createElement('div');
@@ -704,12 +776,18 @@
         </div>
       `;
 
-      // Smart flip: flip tooltip if near top of window
+      // Prevent tweet card click navigation when interacting with badge or reset button
+      container.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+
+      // Smart flip: flip tooltip upwards if near bottom of window
       container.addEventListener('mouseenter', () => {
         const rect = container.getBoundingClientRect();
         const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
         if (tooltipEl) {
-          if (rect.top < 240) {
+          const spaceBelow = window.innerHeight - rect.bottom;
+          if (spaceBelow < 440 && rect.top > 440) {
             tooltipEl.classList.add('flipped');
           } else {
             tooltipEl.classList.remove('flipped');
@@ -717,7 +795,11 @@
         }
       });
 
-      actionGroup.appendChild(container);
+      if (mount.beforeElement && mount.beforeElement.parentElement === mount.parent) {
+        mount.parent.insertBefore(container, mount.beforeElement);
+      } else {
+        mount.parent.appendChild(container);
+      }
     }
 
     // Update pill
