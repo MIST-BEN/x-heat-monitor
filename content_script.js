@@ -233,10 +233,11 @@
     return null;
   }
 
-  // Extract tweet ID and author reliably, without confusing quoted tweets
+  // Extract tweet ID, author, and publication timestamp reliably
   function extractTweetIdentity(tweetArticle) {
     let tweetId = null;
     let author = "";
+    let publishedAt = null;
 
     // 0. Extract author directly from tweet header if available
     const userNameEl = tweetArticle.querySelector('[data-testid="User-Name"]');
@@ -247,9 +248,16 @@
       }
     }
 
-    // 1. Time element link points specifically to the tweet itself
+    // 1. Time element link points specifically to the tweet itself and contains ISO datetime
     const timeEl = tweetArticle.querySelector('time');
     if (timeEl) {
+      const dtStr = timeEl.getAttribute('datetime');
+      if (dtStr) {
+        const parsed = new Date(dtStr).getTime();
+        if (!isNaN(parsed) && parsed > 0) {
+          publishedAt = parsed;
+        }
+      }
       const link = timeEl.closest('a[href*="/status/"]');
       if (link) {
         const href = link.getAttribute('href') || '';
@@ -257,7 +265,7 @@
         if (match) {
           if (!author) author = match[1];
           tweetId = match[2];
-          return { tweetId, author };
+          return { tweetId, author, publishedAt };
         }
       }
     }
@@ -270,7 +278,7 @@
         const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
         if (match) {
           tweetId = match[2];
-          return { tweetId, author };
+          return { tweetId, author, publishedAt };
         }
       }
     }
@@ -282,7 +290,7 @@
       if (isFocal) {
         if (!author) author = pathMatch[1];
         tweetId = pathMatch[2];
-        return { tweetId, author };
+        return { tweetId, author, publishedAt };
       }
     }
 
@@ -301,16 +309,16 @@
       }
     }
 
-    return { tweetId, author };
+    return { tweetId, author, publishedAt };
   }
 
   // Extract metrics from single tweet element
   function extractTweetMetrics(tweetArticle) {
-    // 1. Tweet ID & Author
+    // 1. Tweet ID, Author, and Published Time
     const identity = extractTweetIdentity(tweetArticle);
     if (!identity.tweetId) return null;
 
-    const { tweetId, author } = identity;
+    const { tweetId, author, publishedAt } = identity;
 
     // 2. Tweet Text snippet
     const textNode = tweetArticle.querySelector('div[data-testid="tweetText"]');
@@ -343,6 +351,7 @@
     return {
       tweetId,
       author,
+      publishedAt,
       text,
       metrics: { views, likes, retweets, replies, bookmarks },
       actionGroup
@@ -407,7 +416,7 @@
         const data = extractTweetMetrics(article);
         if (!data || !data.actionGroup) return;
 
-        const { tweetId, author, text, metrics, actionGroup } = data;
+        const { tweetId, author, publishedAt, text, metrics, actionGroup } = data;
 
         // Check if tweet belongs to current user
         const isOwn = savedHandle
@@ -436,6 +445,7 @@
             id: tweetId,
             author,
             text,
+            publishedAt: publishedAt || now,
             isOwnTweet: isOwn,
             firstSeenAt: now,
             firstSeenMetrics: { ...metrics },
@@ -445,8 +455,13 @@
           };
           hasNewRecords = true;
         } else {
-          // If baseline was initially captured as 0 before React hydration, promote to first positive value
           const rec = tweetRecords[tweetId];
+          if (publishedAt && (!rec.publishedAt || Math.abs(rec.publishedAt - publishedAt) > 60000)) {
+            rec.publishedAt = publishedAt;
+            hasNewRecords = true;
+          }
+
+          // If baseline was initially captured as 0 before React hydration, promote to first positive value
           if (rec.firstSeenMetrics && rec.firstSeenMetrics.views === 0 && metrics.views > 0) {
             rec.firstSeenMetrics.views = metrics.views;
             rec.firstSeenMetrics.likes = rec.firstSeenMetrics.likes || metrics.likes;
@@ -545,6 +560,7 @@
     const snapshots = record.snapshots || [];
     const firstMetrics = record.firstSeenMetrics || currMetrics;
     const firstSeenAt = record.firstSeenAt || now;
+    const publishedAt = record.publishedAt || firstSeenAt;
 
     // --- 1. Total Delta since first seen ---
     const dTot = {
@@ -581,20 +597,46 @@
       bookmarks: Math.max(0, currMetrics.bookmarks - (basePeriodSnapshot.bookmarks || 0))
     };
 
-    // --- 3. Determine Pill Text & Style (Focused on Total Views + Increments) ---
+    // --- 3. Hourly Velocity (浏览量除以发布时间: 每小时增量 / 时速) ---
+    const publishAgeMs = Math.max(now - publishedAt, 60 * 1000); // 至少 1 分钟防止除以 0
+    const publishAgeHours = publishAgeMs / (1000 * 60 * 60);
+    const hourlyVelocity = publishAgeHours > 0 ? Math.round(currMetrics.views / publishAgeHours) : 0;
+    const hourlyLikesRate = publishAgeHours > 0 ? (currMetrics.likes / publishAgeHours).toFixed(1) : "0.0";
+    const hourlyRtsRate = publishAgeHours > 0 ? (currMetrics.retweets / publishAgeHours).toFixed(1) : "0.0";
+    const hourlyRepliesRate = publishAgeHours > 0 ? (currMetrics.replies / publishAgeHours).toFixed(1) : "0.0";
+    const hourlyBookmarksRate = publishAgeHours > 0 ? (currMetrics.bookmarks / publishAgeHours).toFixed(1) : "0.0";
+
+    let publishAgeStr = "";
+    if (publishAgeHours < 1) {
+      publishAgeStr = `${Math.max(1, Math.round(publishAgeMs / 60000))} 分钟`;
+    } else if (publishAgeHours < 24) {
+      publishAgeStr = `${publishAgeHours.toFixed(1)} 小时`;
+    } else {
+      const days = (publishAgeHours / 24).toFixed(1);
+      publishAgeStr = `${days} 天`;
+    }
+
+    const formattedHourlyRate = hourlyVelocity >= 10000
+      ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
+      : `${hourlyVelocity}/h`;
+
+    // --- 4. Algorithm Push Momentum (推流态势判断) ---
     const vPeriod = dPeriod.views || 0;
     const vTot = dTot.views || 0;
     const vCurr = currMetrics.views || 0;
 
     let pillClass = "steady";
     let icon = "☕";
+    let pushStatus = "☕ 平稳推流";
 
-    if (vPeriod >= 50) {
+    if (vPeriod >= 50 || hourlyVelocity >= 500) {
       pillClass = "hot";
       icon = "🔥";
-    } else if (vPeriod > 0 || vTot > 0) {
+      pushStatus = "🔥 爆款推流中";
+    } else if (vPeriod >= 5 || hourlyVelocity >= 80 || vTot > 0) {
       pillClass = "growing";
       icon = "⚡";
+      pushStatus = "⚡ 正在加速推流";
     }
 
     let mainText = "";
@@ -603,11 +645,13 @@
     if (isNew) {
       pillClass = "recording";
       icon = "⏱️";
-      mainText = `${icon} ${vCurr} 阅 · 基准已锁定`;
-      subText = `${intervalMinutes}m 增量待更新`;
+      mainText = `${icon} ${vCurr} 阅 · ${formattedHourlyRate}`;
+      subText = `${intervalMinutes}m 监测中`;
     } else {
-      mainText = `${icon} ${vCurr} 阅 · ${intervalMinutes}m +${vPeriod}`;
-      subText = `累计 +${vTot}`;
+      mainText = `${icon} ${vCurr} 阅 · ${formattedHourlyRate}`;
+      subText = vTot > 0 && vTot !== vPeriod
+        ? `${intervalMinutes}m +${vPeriod} · 累计 +${vTot}`
+        : `${intervalMinutes}m +${vPeriod}`;
     }
 
     return {
@@ -615,12 +659,22 @@
       isOwnTweet: record.isOwnTweet || false,
       intervalMinutes,
       pillClass,
+      pushStatus,
       mainText,
       subText,
       dPeriod,
       dTot,
       curr: currMetrics,
       firstMetrics,
+      publishedAt,
+      publishAgeStr,
+      publishDateStr: new Date(publishedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      hourlyVelocity,
+      formattedHourlyRate,
+      hourlyLikesRate,
+      hourlyRtsRate,
+      hourlyRepliesRate,
+      hourlyBookmarksRate,
       firstSeenAt,
       firstSeenDateStr: new Date(firstSeenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       samplePeriodDateStr: new Date(basePeriodSnapshot.t || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -696,14 +750,15 @@
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
           <span>📊 X 帖子热度时序追踪 ${ownTag}</span>
-          <span style="font-size:10px; color:#64748b;">持续追踪 ${info.totalAgeStr}</span>
+          <span style="font-size:10px; color:#fbbf24; font-weight:700;">${info.pushStatus} · 均速 ${info.formattedHourlyRate}</span>
         </div>
         <table class="x-heat-pulse-tooltip-table">
           <thead>
             <tr>
               <th>互动指标</th>
-              <th>近${info.intervalMinutes}分钟增量</th>
-              <th>监控累计增量</th>
+              <th>近${info.intervalMinutes}分增量</th>
+              <th>监控累计</th>
+              <th>时均增速</th>
               <th>当前总量</th>
             </tr>
           </thead>
@@ -712,36 +767,41 @@
               <td>👁️ 曝光浏览</td>
               <td>${formatVal(dp.views)}</td>
               <td>${formatVal(dt.views, true)}</td>
+              <td class="x-val-speed">${info.formattedHourlyRate}</td>
               <td class="x-val-raw" style="font-weight:700; color:#38bdf8;">${c.views}</td>
             </tr>
             <tr>
               <td>❤️ 获得点赞</td>
               <td>${formatVal(dp.likes)}</td>
               <td>${formatVal(dt.likes, true)}</td>
+              <td class="x-val-speed">${info.hourlyLikesRate}/h</td>
               <td class="x-val-raw">${c.likes}</td>
             </tr>
             <tr>
               <td>🔁 转发推文</td>
               <td>${formatVal(dp.retweets)}</td>
               <td>${formatVal(dt.retweets, true)}</td>
+              <td class="x-val-speed">${info.hourlyRtsRate}/h</td>
               <td class="x-val-raw">${c.retweets}</td>
             </tr>
             <tr>
               <td>💬 参与回复</td>
               <td>${formatVal(dp.replies)}</td>
               <td>${formatVal(dt.replies, true)}</td>
+              <td class="x-val-speed">${info.hourlyRepliesRate}/h</td>
               <td class="x-val-raw">${c.replies}</td>
             </tr>
             <tr>
               <td>🔖 书签收藏</td>
               <td>${formatVal(dp.bookmarks)}</td>
               <td>${formatVal(dt.bookmarks, true)}</td>
+              <td class="x-val-speed">${info.hourlyBookmarksRate}/h</td>
               <td class="x-val-raw">${c.bookmarks}</td>
             </tr>
           </tbody>
         </table>
         <div class="x-heat-pulse-tooltip-footer">
-          <span>首次捕获基准: ${info.firstMetrics.views || 0} 阅 (${info.firstSeenDateStr})</span>
+          <span>发布于: ${info.publishAgeStr}前 · 首次基准: ${info.firstMetrics.views || 0} 阅</span>
           <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">🔄 重设此帖基准</button>
         </div>
       `;

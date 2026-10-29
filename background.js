@@ -115,10 +115,11 @@ async function executePollingCycle(source = "SCHEDULED") {
     const allRecords = Object.values(tweetRecords);
     const ownRecords = allRecords.filter(t => t.isOwnTweet || (myHandle && t.author && t.author.toLowerCase() === myHandle));
 
-    // Calculate view totals and increments specifically for user's own posts
+    // Calculate view totals, increments, and hourly velocity specifically for user's own posts
     let totalOwnViews = 0;
     let totalOwnViewsDelta = 0;
     let totalLifetimeDelta = 0;
+    let totalHourlyRate = 0;
     const intervalMinutes = config.intervalMinutes || 3;
     const targetIntervalMs = intervalMinutes * 60 * 1000;
 
@@ -128,6 +129,11 @@ async function executePollingCycle(source = "SCHEDULED") {
         if (snaps.length > 0) {
           const curr = snaps[snaps.length - 1];
           const first = item.firstSeenMetrics || snaps[0];
+          const pubTime = item.publishedAt || item.firstSeenAt || timestamp;
+          const pubAgeHours = Math.max(0.016, (timestamp - pubTime) / (1000 * 60 * 60));
+          const hRate = Math.round((curr.views || 0) / pubAgeHours);
+          totalHourlyRate += hRate;
+
           let baseSnap = snaps[0];
           let minDiff = Infinity;
           for (const s of snaps) {
@@ -147,7 +153,7 @@ async function executePollingCycle(source = "SCHEDULED") {
     }
 
     // Update Chrome toolbar badge icon: displays live delta if positive, or total views if steady
-    updateToolbarBadge(totalOwnViewsDelta, totalOwnViews, totalLifetimeDelta, ownRecords.length > 0, myHandle, intervalMinutes);
+    updateToolbarBadge(totalOwnViewsDelta, totalOwnViews, totalLifetimeDelta, totalHourlyRate, ownRecords.length > 0, myHandle, intervalMinutes);
 
     // Save polling status
     await chrome.storage.local.set({
@@ -157,16 +163,17 @@ async function executePollingCycle(source = "SCHEDULED") {
         totalOwnViews,
         totalOwnViewsDelta,
         totalLifetimeDelta,
+        totalHourlyRate,
         monitoredOwnCount: ownRecords.length
       }
     });
 
     // Burst Alert Notification if own tweets spike
-    if (config.enableNotification && totalOwnViewsDelta >= config.alertThreshold && ownRecords.length > 0) {
-      triggerNotification(totalOwnViewsDelta, ownRecords[0]);
+    if (config.enableNotification && (totalOwnViewsDelta >= config.alertThreshold || totalHourlyRate >= 500) && ownRecords.length > 0) {
+      triggerNotification(totalOwnViewsDelta, totalHourlyRate, ownRecords[0]);
     }
 
-    return { totalOwnViews, totalOwnViewsDelta, totalLifetimeDelta, ownRecordsCount: ownRecords.length };
+    return { totalOwnViews, totalOwnViewsDelta, totalLifetimeDelta, totalHourlyRate, ownRecordsCount: ownRecords.length };
   } catch (error) {
     console.error("[X-Heat-Pulse] Polling cycle failed:", error);
     chrome.action.setBadgeText({ text: "ERR" });
@@ -176,7 +183,7 @@ async function executePollingCycle(source = "SCHEDULED") {
 }
 
 // 5. Update Action Badge UI (Exclusively displays user's own post view metrics)
-function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, hasOwnPosts, myHandle = "sben96001", intervalMinutes = 3) {
+function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, totalHourlyRate, hasOwnPosts, myHandle = "sben96001", intervalMinutes = 3) {
   if (!hasOwnPosts) {
     chrome.action.setBadgeText({ text: "" });
     chrome.action.setTitle({ title: `X Heat Pulse: 正在等待检测 @${myHandle} 的推文` });
@@ -185,7 +192,7 @@ function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, hasOw
   if (viewsDelta > 0) {
     const text = viewsDelta > 999 ? `${(viewsDelta / 1000).toFixed(1)}k` : `+${viewsDelta}`;
     chrome.action.setBadgeText({ text });
-    if (viewsDelta >= 50) {
+    if (viewsDelta >= 50 || totalHourlyRate >= 500) {
       chrome.action.setBadgeBackgroundColor({ color: "#F43F5E" }); // Hot rose
     } else {
       chrome.action.setBadgeBackgroundColor({ color: "#10B981" }); // Emerald green
@@ -197,19 +204,25 @@ function updateToolbarBadge(viewsDelta, totalOwnViews, totalLifetimeDelta, hasOw
     chrome.action.setBadgeBackgroundColor({ color: "#334155" }); // Neutral slate dark
   }
 
+  const pushState = (viewsDelta >= 50 || totalHourlyRate >= 500)
+    ? "🔥 爆款推流中"
+    : (viewsDelta >= 5 || totalHourlyRate >= 80)
+      ? "⚡ 正在加速推流"
+      : "☕ 平稳推流";
+
   chrome.action.setTitle({
-    title: `X Heat Pulse 监控中心 (@${myHandle})\n当前总浏览: ${totalOwnViews} 次\n近${intervalMinutes}分钟增量: +${viewsDelta} 次\n监控累计增量: +${totalLifetimeDelta} 次`
+    title: `X Heat Pulse 监控中心 (@${myHandle})\n推流态势: ${pushState}\n当前总曝光: ${totalOwnViews} 次\n时增均速: ~${totalHourlyRate} 阅/小时 (浏览/发布时间)\n近${intervalMinutes}分钟增量: +${viewsDelta} 次\n监控累计增量: +${totalLifetimeDelta} 次`
   });
 }
 
 // 6. Trigger Chrome Notification for traffic spikes
-function triggerNotification(viewsDelta, topTweet) {
+function triggerNotification(viewsDelta, totalHourlyRate, topTweet) {
   const tweetSnippet = topTweet ? `推文: "${(topTweet.text || '').substring(0, 40)}..."` : "";
   chrome.notifications.create({
     type: "basic",
     iconUrl: "icons/icon128.png",
-    title: `🔥 X 专属推文浏览激增: +${viewsDelta}`,
-    message: `您的账号推文在最近3分钟内浏览量增加 +${viewsDelta} 次！\n${tweetSnippet}`,
+    title: `🔥 X 专属推文开始爆流! (时速 ~${totalHourlyRate}/h)`,
+    message: `您的账号推文在近3分钟增量 +${viewsDelta} 次，时增均速达 ~${totalHourlyRate} 阅/小时！\n${tweetSnippet}`,
     priority: 2
   });
 }

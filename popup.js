@@ -213,6 +213,8 @@ async function renderData() {
     document.getElementById("status-tag").className = "tag";
     const totalViewsEl = document.getElementById("total-views");
     if (totalViewsEl) totalViewsEl.textContent = "0";
+    const totalHourlyEl = document.getElementById("total-hourly-rate");
+    if (totalHourlyEl) totalHourlyEl.textContent = "0/h";
     document.getElementById("delta-heat").textContent = "+0";
     const deltaTotEl = document.getElementById("delta-total");
     if (deltaTotEl) deltaTotEl.textContent = "+0";
@@ -222,7 +224,7 @@ async function renderData() {
       <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 22px 10px; line-height:1.6;">
         ⚡ <b>实时监控就绪</b><br>
         当前正在专属监控 <b style="color:#38bdf8;">@${myHandle}</b>。<br>
-        请在浏览器中打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8;">x.com/${myHandle}</a> 浏览主页，推文旁将自动标出专属增量！
+        请在浏览器中打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8;">x.com/${myHandle}</a> 浏览主页，推文旁将自动标出专属增量与时速！
       </div>
     `;
     document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
@@ -235,6 +237,8 @@ async function renderData() {
     document.getElementById("status-tag").className = "tag live";
     const totalViewsEl = document.getElementById("total-views");
     if (totalViewsEl) totalViewsEl.textContent = "0";
+    const totalHourlyEl = document.getElementById("total-hourly-rate");
+    if (totalHourlyEl) totalHourlyEl.textContent = "0/h";
     document.getElementById("delta-heat").textContent = "+0";
     const deltaTotEl = document.getElementById("delta-total");
     if (deltaTotEl) deltaTotEl.textContent = "+0";
@@ -247,6 +251,8 @@ async function renderData() {
     document.getElementById("d-replies").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
     document.getElementById("d-bookmarks").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
     document.getElementById("d-views").innerHTML = `0 <span style="font-size:10px; color:#94a3b8;">(+0)</span>`;
+    const dSpeedEl = document.getElementById("d-speed");
+    if (dSpeedEl) dSpeedEl.textContent = "0/h";
 
     document.getElementById("posts-container").innerHTML = `
       <div style="background:rgba(56,189,248,0.06); border:1px dashed rgba(56,189,248,0.25); border-radius:10px; padding:16px 12px; text-align:center; color:#94a3b8; font-size:11px; line-height:1.7;">
@@ -298,10 +304,11 @@ async function renderData() {
   document.getElementById("status-tag").textContent = `${intervalM}m 实时监控中`;
   document.getElementById("status-tag").className = "tag live";
 
-  // Aggregate Totals & Deltas across targetList
+  // Aggregate Totals, Deltas & Hourly Velocity across targetList
   let totalViews = 0;
   let totalDeltaViews = 0;
   let totalLifetimeDeltaViews = 0;
+  let totalHourlyRate = 0;
   const totalBreakdown = {
     views: 0, viewsTotal: 0,
     likes: 0, likesTotal: 0,
@@ -320,6 +327,13 @@ async function renderData() {
 
     const curr = snaps[snaps.length - 1];
     const first = tweet.firstSeenMetrics || snaps[0];
+    const pubTime = tweet.publishedAt || tweet.firstSeenAt || now;
+    const pubAgeMs = Math.max(now - pubTime, 60 * 1000);
+    const pubAgeHours = pubAgeMs / (1000 * 60 * 60);
+    const hourlyVelocity = pubAgeHours > 0 ? Math.round((curr.views || 0) / pubAgeHours) : 0;
+    const formattedHourlyRate = hourlyVelocity >= 10000
+      ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
+      : `${hourlyVelocity}/h`;
 
     // Find previous snapshot ~3 mins ago
     let prev = snaps[0];
@@ -355,6 +369,7 @@ async function renderData() {
     totalViews += (curr.views || 0);
     totalDeltaViews += dPeriod.views;
     totalLifetimeDeltaViews += dTot.views;
+    totalHourlyRate += hourlyVelocity;
 
     totalBreakdown.views += dPeriod.views;
     totalBreakdown.viewsTotal += (curr.views || 0);
@@ -379,13 +394,22 @@ async function renderData() {
       current: curr,
       dPeriod,
       dTot,
+      hourlyVelocity,
+      formattedHourlyRate,
       firstSeenAt: tweet.firstSeenAt || now
     });
   }
 
-  // Hero Card Summary: Shows Total Views + 3m Delta + Lifetime Delta
+  // Hero Card Summary: Shows Total Views + Hourly Velocity + 3m Delta + Lifetime Delta
   const totalViewsEl = document.getElementById("total-views");
   if (totalViewsEl) totalViewsEl.textContent = formatNumber(totalViews);
+
+  const totalHourlyEl = document.getElementById("total-hourly-rate");
+  if (totalHourlyEl) {
+    totalHourlyEl.textContent = totalHourlyRate >= 10000
+      ? `${(totalHourlyRate / 1000).toFixed(1)}k/h`
+      : `${totalHourlyRate}/h`;
+  }
 
   const deltaHeatEl = document.getElementById("delta-heat");
   if (deltaHeatEl) deltaHeatEl.textContent = `+${totalDeltaViews}`;
@@ -394,16 +418,16 @@ async function renderData() {
   if (deltaTotEl) deltaTotEl.textContent = `+${totalLifetimeDeltaViews}`;
   
   const rateEl = document.getElementById("delta-rate");
-  if (totalDeltaViews >= 50) {
-    rateEl.textContent = "🔥 快速增长";
+  if (totalDeltaViews >= 50 || totalHourlyRate >= 500) {
+    rateEl.textContent = "🔥 爆款推流中";
     rateEl.style.background = "rgba(244, 63, 94, 0.2)";
     rateEl.style.color = "#fb7185";
-  } else if (totalDeltaViews > 0) {
-    rateEl.textContent = "⚡ 持续上升";
+  } else if (totalDeltaViews >= 5 || totalHourlyRate >= 80) {
+    rateEl.textContent = "⚡ 正在加速推流";
     rateEl.style.background = "rgba(16, 185, 129, 0.2)";
     rateEl.style.color = "#34d399";
   } else {
-    rateEl.textContent = "平稳";
+    rateEl.textContent = "☕ 平稳推流";
     rateEl.style.background = "rgba(100, 116, 139, 0.2)";
     rateEl.style.color = "#94a3b8";
   }
@@ -415,11 +439,18 @@ async function renderData() {
   document.getElementById("d-bookmarks").innerHTML = `${formatNumber(totalBreakdown.bookmarksTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.bookmarks})</span>`;
   document.getElementById("d-views").innerHTML = `${formatNumber(totalBreakdown.viewsTotal)} <span style="font-size:10px; color:#94a3b8;">(+${totalBreakdown.views})</span>`;
 
+  const dSpeedEl = document.getElementById("d-speed");
+  if (dSpeedEl) {
+    dSpeedEl.textContent = totalHourlyRate >= 10000
+      ? `${(totalHourlyRate / 1000).toFixed(1)}k/h`
+      : `${totalHourlyRate}/h`;
+  }
+
   // Time
   document.getElementById("last-update").textContent = `更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
 
-  // Sort: prioritize tweets with recent view changes
-  activeTweets.sort((a, b) => (b.dPeriod.views + b.dPeriod.likes * 10) - (a.dPeriod.views + a.dPeriod.likes * 10) || (b.dTot.views - a.dTot.views));
+  // Sort: prioritize tweets with recent view changes or highest velocity
+  activeTweets.sort((a, b) => (b.dPeriod.views * 2 + b.hourlyVelocity) - (a.dPeriod.views * 2 + a.hourlyVelocity) || (b.dTot.views - a.dTot.views));
 
   // Render list
   document.getElementById("monitored-count").textContent = `${currentTab === "own" ? "我的帖子" : "已监控"}: ${activeTweets.length} 条`;
@@ -443,7 +474,7 @@ function renderPostsList(tweets, intervalM = 3) {
     card.innerHTML = `
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ <b>${formatNumber(c.views)}</b> 总阅 · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
+        <span>👁️ <b>${formatNumber(c.views)}</b> 总阅 <span style="color:#fbbf24; font-weight:700; margin-left:3px;">⚡ ${t.formattedHourlyRate}</span> · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
         <span class="post-delta" style="color: #34d399;">${intervalM}m: <b>+${dp.views || 0}</b> | 累计: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
       </div>
     `;

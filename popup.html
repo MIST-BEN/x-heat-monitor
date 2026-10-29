@@ -168,6 +168,14 @@
       font-feature-settings: "tnum";
       line-height: 1.1;
     }
+    .hero-val-speed {
+      font-size: 20px;
+      font-weight: 800;
+      color: #fbbf24;
+      font-feature-settings: "tnum";
+      line-height: 1.1;
+      text-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+    }
     .hero-stat-divider {
       width: 1px;
       height: 26px;
@@ -475,13 +483,18 @@
       </div>
       <div class="hero-stat-divider"></div>
       <div class="hero-stat-block">
+        <span class="hero-val-speed" id="total-hourly-rate">0/h</span>
+        <span class="hero-unit">时均增速</span>
+      </div>
+      <div class="hero-stat-divider"></div>
+      <div class="hero-stat-block">
         <span class="hero-val" id="delta-heat">+0</span>
         <span class="hero-unit" id="label-delta-unit">近3m增量</span>
       </div>
       <div class="hero-stat-divider"></div>
       <div class="hero-stat-block">
         <span class="hero-val-tot" id="delta-total">+0</span>
-        <span class="hero-unit">监控累计增量</span>
+        <span class="hero-unit">监控累计</span>
       </div>
       <span class="hero-burst" id="delta-rate">平稳</span>
     </div>
@@ -524,8 +537,8 @@
       <div class="delta" id="d-views" style="color:#38bdf8;">0 <span style="font-size:10px; color:#94a3b8;">(+0)</span></div>
     </div>
     <div class="metric-item">
-      <div class="title">周期 (Interval)</div>
-      <div class="delta" style="color:#94a3b8; font-size:13px;" id="d-interval">3m</div>
+      <div class="title">时均增速 (Views/h)</div>
+      <div class="delta" style="color:#fbbf24; font-size:13px;" id="d-speed">0/h</div>
     </div>
   </div>
 
