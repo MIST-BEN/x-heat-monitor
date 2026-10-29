@@ -49,10 +49,15 @@ async function renderData() {
   ]);
 
   const tweetRecords = storage.tweet_records || {};
-  const config = storage.config || { intervalMinutes: 5 };
+  const config = storage.config || { intervalMinutes: 3 };
+  const intervalM = config.intervalMinutes || 3;
   const tweetList = Object.values(tweetRecords);
 
-  document.getElementById("d-interval").textContent = `${config.intervalMinutes}m`;
+  document.getElementById("d-interval").textContent = `${intervalM}m`;
+  const titleEl = document.getElementById("label-delta-title");
+  if (titleEl) titleEl.textContent = `近${intervalM}分钟热度增量 (ΔHeat)`;
+  const unitEl = document.getElementById("label-delta-unit");
+  if (unitEl) unitEl.textContent = `pts/${intervalM}min`;
 
   if (tweetList.length === 0) {
     document.getElementById("account-name").textContent = "@X.com";
@@ -64,21 +69,21 @@ async function renderData() {
     document.getElementById("posts-container").innerHTML = `
       <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 20px 10px; line-height:1.6;">
         ⚡ <b>实时标柱已激活</b><br>
-        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览你的主页或帖子，插件会自动在每条帖子右下角标出 5 分钟增量与自首次看到的累计总增量！
+        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览你的主页或帖子，插件会自动在每条帖子右下角标出 ${intervalM} 分钟增量与自首次看到的累计总增量！
       </div>
     `;
     document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
     return;
   }
 
-  document.getElementById("status-tag").textContent = "页面实时监控中";
+  document.getElementById("status-tag").textContent = `${intervalM}m 实时监控中`;
   document.getElementById("status-tag").className = "tag live";
 
   // Aggregate Deltas
   let totalDeltaViews = 0;
   let totalDeltaLikes = 0;
   const totalBreakdown = { views: 0, likes: 0, retweets: 0, replies: 0, bookmarks: 0 };
-  const targetIntervalMs = (config.intervalMinutes || 5) * 60 * 1000;
+  const targetIntervalMs = intervalM * 60 * 1000;
   const now = Date.now();
 
   const activeTweets = [];
@@ -182,13 +187,13 @@ async function renderData() {
 
   // Render list
   document.getElementById("monitored-count").textContent = `监控中: ${activeTweets.length} 条`;
-  renderPostsList(activeTweets);
+  renderPostsList(activeTweets, intervalM);
 
   // Sparkline
   drawSparkline(activeTweets.map(t => ({ heatDelta: t.d5.views + t.d5.likes * 5 })));
 }
 
-function renderPostsList(tweets) {
+function renderPostsList(tweets, intervalM = 3) {
   const container = document.getElementById("posts-container");
   container.innerHTML = "";
 
@@ -213,7 +218,7 @@ function renderPostsList(tweets) {
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
         <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)}</span>
-        <span class="post-delta" style="color: #00ba7c;">5m: <b>${d5Text}</b> | 累计: <b style="color:#1d9bf0;">${totText}</b></span>
+        <span class="post-delta" style="color: #00ba7c;">${intervalM}m: <b>${d5Text}</b> | 累计: <b style="color:#1d9bf0;">${totText}</b></span>
       </div>
     `;
     container.appendChild(card);

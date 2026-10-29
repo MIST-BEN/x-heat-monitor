@@ -119,20 +119,21 @@
         <select id="intervalMinutes">
           <option value="1">1 分钟 (极速检测)</option>
           <option value="2">2 分钟</option>
-          <option value="5" selected>5 分钟 (推荐标准)</option>
+          <option value="3" selected>3 分钟 (推荐标准·灵敏监控)</option>
+          <option value="5">5 分钟</option>
           <option value="10">10 分钟</option>
           <option value="15">15 分钟</option>
         </select>
       </div>
       <div class="form-group">
         <label for="alertThreshold">热度爆发告警阈值 (ΔHeat)</label>
-        <input type="number" id="alertThreshold" value="50" min="1" max="1000">
+        <input type="number" id="alertThreshold" value="40" min="1" max="1000">
       </div>
     </div>
     <div class="form-group">
       <label class="checkbox-group">
         <input type="checkbox" id="enableNotification" checked>
-        <span>当 5 分钟增量超过阈值时发送系统弹窗提醒</span>
+        <span>当周期增量超过阈值时发送系统弹窗提醒</span>
       </label>
     </div>
   </div>

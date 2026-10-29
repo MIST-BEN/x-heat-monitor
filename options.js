@@ -6,8 +6,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const { config } = await chrome.storage.local.get("config");
 
   if (config) {
-    document.getElementById("intervalMinutes").value = config.intervalMinutes || 5;
-    document.getElementById("alertThreshold").value = config.alertThreshold || 50;
+    document.getElementById("intervalMinutes").value = config.intervalMinutes || 3;
+    document.getElementById("alertThreshold").value = config.alertThreshold || 40;
     document.getElementById("enableNotification").checked = config.enableNotification !== false;
 
     if (config.weights) {

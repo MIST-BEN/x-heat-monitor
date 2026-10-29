@@ -1,16 +1,17 @@
 /**
- * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.2.0)
- * 1. Accurately extracts real DOM metrics from x.com.
- * 2. Permanently retains initial baseline (First-Seen Metrics) to track lifetime delta.
- * 3. Accurately tracks 5-minute delta without rounding views to zero.
- * 4. Injects clear, dual-display badges and detailed comparison tables directly onto tweets.
+ * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.3.0)
+ * 1. Default 3-minute high-sensitivity sampling interval (configurable).
+ * 2. Directly inspects title, aria-label, and text for exact unrounded metric counts.
+ * 3. Permanently retains initial baseline (First-Seen Metrics) to track lifetime delta.
+ * 4. Dual-display badges and dynamic comparison tables with overflow protection.
  */
 
 (function () {
   'use strict';
 
-  console.log('[X-Heat-Pulse] v1.2.0 Content script active.');
+  console.log('[X-Heat-Pulse] v1.3.0 Content script active.');
 
+  const DEFAULT_INTERVAL_MINUTES = 3;
   let isScanning = false;
   let scanTimeout = null;
 
@@ -39,20 +40,24 @@
     return Math.round(num);
   }
 
-  // Extract count from button or link (checks inner text and aria-label)
+  // Extract count from button or link (checks title, aria-label, and inner text)
   function extractElementCount(container) {
     if (!container) return 0;
 
-    // Check inner text
-    const textSpans = container.querySelectorAll('span');
-    for (const span of textSpans) {
-      const text = span.textContent?.trim();
-      if (text && /^[\d.,KMwW万亿]+$/.test(text)) {
-        return parseMetricNumber(text);
-      }
+    // 1. Check title attribute (Twitter often puts full exact number like title="1,248" even when visible text is "1.2K")
+    const title = container.getAttribute('title');
+    if (title) {
+      const match = title.match(/([\d.,]+)\s*([kKmMwW万亿])?/);
+      if (match) return parseMetricNumber(match[0]);
+    }
+    const titleChild = container.querySelector('[title]');
+    if (titleChild) {
+      const t = titleChild.getAttribute('title');
+      const match = t ? t.match(/([\d.,]+)\s*([kKmMwW万亿])?/) : null;
+      if (match) return parseMetricNumber(match[0]);
     }
 
-    // Check aria-label
+    // 2. Check aria-label
     const aria = container.getAttribute('aria-label');
     if (aria) {
       const numMatch = aria.match(/([\d.,]+)\s*([kKmMwW万亿])?/);
@@ -61,7 +66,16 @@
       }
     }
 
-    // Direct text content
+    // 3. Check direct visible text inside spans
+    const textSpans = container.querySelectorAll('span');
+    for (const span of textSpans) {
+      const text = span.textContent?.trim();
+      if (text && /^[\d.,KMwW万亿]+$/.test(text)) {
+        return parseMetricNumber(text);
+      }
+    }
+
+    // 4. Direct text content
     const directText = container.textContent?.trim();
     if (directText) {
       const numMatch = directText.match(/([\d.,]+)\s*([kKmMwW万亿])?/);
@@ -162,11 +176,12 @@
         return;
       }
 
-      // Fetch stored tweet records
+      // Fetch stored tweet records and config
       const storage = await chrome.storage.local.get(["tweet_records", "config"]);
       const tweetRecords = storage.tweet_records || {};
-      const config = storage.config || { intervalMinutes: 5 };
-      const targetIntervalMs = (config.intervalMinutes || 5) * 60 * 1000;
+      const config = storage.config || { intervalMinutes: DEFAULT_INTERVAL_MINUTES };
+      const intervalMinutes = config.intervalMinutes || DEFAULT_INTERVAL_MINUTES;
+      const targetIntervalMs = intervalMinutes * 60 * 1000;
       const now = Date.now();
 
       let hasNewRecords = false;
@@ -196,7 +211,7 @@
         record.lastSeen = now;
         if (text && !record.text) record.text = text;
 
-        // Guard: ensure firstSeenMetrics exists (for records created in previous version)
+        // Guard: ensure firstSeenMetrics exists
         if (!record.firstSeenMetrics) {
           record.firstSeenMetrics = record.snapshots && record.snapshots.length > 0
             ? { ...record.snapshots[0] }
@@ -205,11 +220,11 @@
           hasNewRecords = true;
         }
 
-        // 2. Append Snapshot if 30s elapsed or metrics changed
+        // 2. Append Snapshot if 25s elapsed or metrics changed
         const lastSnapshot = record.snapshots[record.snapshots.length - 1];
         const shouldSaveNewSnapshot =
           !lastSnapshot ||
-          (now - lastSnapshot.t >= 30 * 1000) ||
+          (now - lastSnapshot.t >= 25 * 1000) ||
           metricsChanged(lastSnapshot, metrics);
 
         if (shouldSaveNewSnapshot) {
@@ -225,8 +240,8 @@
           hasNewRecords = true;
         }
 
-        // 3. Compute 5-minute Delta and Total Lifetime Delta
-        const deltaInfo = computeDeltas(record, now, targetIntervalMs, metrics);
+        // 3. Compute Period Delta and Total Lifetime Delta
+        const deltaInfo = computeDeltas(record, now, targetIntervalMs, metrics, intervalMinutes);
 
         // 4. Inject or Update Badge
         injectOrUpdateBadge(actionGroup, tweetId, deltaInfo, record);
@@ -234,7 +249,16 @@
 
       // Persist to local storage
       if (hasNewRecords) {
-        await chrome.storage.local.set({ tweet_records: tweetRecords });
+        // Safe prune: keep active tweets
+        const tweetKeys = Object.keys(tweetRecords);
+        if (tweetKeys.length > 250) {
+          tweetKeys.sort((a, b) => (tweetRecords[b].lastSeen || 0) - (tweetRecords[a].lastSeen || 0));
+          const trimmed = {};
+          tweetKeys.slice(0, 250).forEach(k => { trimmed[k] = tweetRecords[k]; });
+          await chrome.storage.local.set({ tweet_records: trimmed });
+        } else {
+          await chrome.storage.local.set({ tweet_records: tweetRecords });
+        }
       }
     } catch (err) {
       console.warn('[X-Heat-Pulse] Error during tweet scan:', err);
@@ -247,8 +271,8 @@
     return a.views !== b.views || a.likes !== b.likes || a.retweets !== b.retweets || a.replies !== b.replies || a.bookmarks !== b.bookmarks;
   }
 
-  // Compute both 5m and Total Deltas
-  function computeDeltas(record, now, targetIntervalMs, currMetrics) {
+  // Compute both Interval Delta and Total Deltas
+  function computeDeltas(record, now, targetIntervalMs, currMetrics, intervalMinutes) {
     const snapshots = record.snapshots || [];
     const firstMetrics = record.firstSeenMetrics || currMetrics;
     const firstSeenAt = record.firstSeenAt || now;
@@ -264,46 +288,43 @@
     const totalAgeMs = now - firstSeenAt;
     const totalAgeStr = formatElapsedTime(totalAgeMs);
 
-    // --- 2. 5-Minute Delta ---
+    // --- 2. Interval Delta (e.g. 3m) ---
     const targetTimestamp = now - targetIntervalMs;
-    let base5mSnapshot = snapshots[0] || currMetrics;
+    let basePeriodSnapshot = snapshots[0] || currMetrics;
     let minDiff = Infinity;
 
     for (const snap of snapshots) {
       const diff = Math.abs(snap.t - targetTimestamp);
       if (diff < minDiff) {
         minDiff = diff;
-        base5mSnapshot = snap;
+        basePeriodSnapshot = snap;
       }
     }
 
-    const age5mMs = now - (base5mSnapshot.t || now);
-    const isNew = totalAgeMs < 45 * 1000 && snapshots.length <= 1;
+    const agePeriodMs = now - (basePeriodSnapshot.t || now);
+    const isNew = totalAgeMs < 35 * 1000 && snapshots.length <= 1;
 
-    const d5 = {
-      views: Math.max(0, currMetrics.views - (base5mSnapshot.views || 0)),
-      likes: Math.max(0, currMetrics.likes - (base5mSnapshot.likes || 0)),
-      retweets: Math.max(0, currMetrics.retweets - (base5mSnapshot.retweets || 0)),
-      replies: Math.max(0, currMetrics.replies - (base5mSnapshot.replies || 0)),
-      bookmarks: Math.max(0, currMetrics.bookmarks - (base5mSnapshot.bookmarks || 0))
+    const dPeriod = {
+      views: Math.max(0, currMetrics.views - (basePeriodSnapshot.views || 0)),
+      likes: Math.max(0, currMetrics.likes - (basePeriodSnapshot.likes || 0)),
+      retweets: Math.max(0, currMetrics.retweets - (basePeriodSnapshot.retweets || 0)),
+      replies: Math.max(0, currMetrics.replies - (basePeriodSnapshot.replies || 0)),
+      bookmarks: Math.max(0, currMetrics.bookmarks - (basePeriodSnapshot.bookmarks || 0))
     };
 
     // --- 3. Determine Pill Text & Style ---
-    const sum5m = d5.views + d5.likes * 10 + d5.retweets * 20 + d5.replies * 10 + d5.bookmarks * 15;
-    const sumTot = dTot.views + dTot.likes * 10 + dTot.retweets * 20 + dTot.replies * 10 + dTot.bookmarks * 15;
-
     let pillClass = "steady";
     let icon = "☕";
 
-    if (d5.likes > 0 || d5.retweets > 0 || d5.views >= 50) {
+    if (dPeriod.likes > 0 || dPeriod.retweets > 0 || dPeriod.views >= 30) {
       pillClass = "hot";
       icon = "🔥";
-    } else if (d5.views > 0 || dTot.views > 0 || dTot.likes > 0) {
+    } else if (dPeriod.views > 0 || dTot.views > 0 || dTot.likes > 0) {
       pillClass = "growing";
       icon = "⚡";
     }
 
-    let summary5m = formatDeltaSummary(d5);
+    let summaryPeriod = formatDeltaSummary(dPeriod);
     let summaryTot = formatDeltaSummary(dTot);
 
     let mainText = "";
@@ -315,24 +336,25 @@
       mainText = "初始记录中";
       subText = "基准已锁定";
     } else {
-      mainText = `${icon} 5m: ${summary5m}`;
+      mainText = `${icon} ${intervalMinutes}m: ${summaryPeriod}`;
       subText = `总: ${summaryTot}`;
     }
 
     return {
       isNew,
+      intervalMinutes,
       pillClass,
       mainText,
       subText,
-      d5,
+      dPeriod,
       dTot,
       curr: currMetrics,
       firstMetrics,
       firstSeenAt,
       firstSeenDateStr: new Date(firstSeenAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      sample5mDateStr: new Date(base5mSnapshot.t || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      samplePeriodDateStr: new Date(basePeriodSnapshot.t || now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       totalAgeStr,
-      interval5mStr: Math.max(1, Math.round(age5mMs / 60000))
+      intervalPeriodStr: Math.max(1, Math.round(agePeriodMs / 60000))
     };
   }
 
@@ -356,6 +378,19 @@
         </div>
       `;
 
+      // Smart flip: flip tooltip if near top of window
+      container.addEventListener('mouseenter', () => {
+        const rect = container.getBoundingClientRect();
+        const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
+        if (tooltipEl) {
+          if (rect.top < 230) {
+            tooltipEl.classList.add('flipped');
+          } else {
+            tooltipEl.classList.remove('flipped');
+          }
+        }
+      });
+
       actionGroup.appendChild(container);
     }
 
@@ -373,7 +408,7 @@
     // Render Full Table Tooltip
     const tooltip = container.querySelector('.x-heat-pulse-tooltip');
     if (tooltip) {
-      const d5 = info.d5;
+      const dp = info.dPeriod;
       const dt = info.dTot;
       const c = info.curr;
 
@@ -386,7 +421,7 @@
           <thead>
             <tr>
               <th>互动指标</th>
-              <th>近5分钟</th>
+              <th>近${info.intervalMinutes}分钟</th>
               <th>首次至今</th>
               <th>当前总量</th>
             </tr>
@@ -394,31 +429,31 @@
           <tbody>
             <tr>
               <td>👁️ 曝光浏览</td>
-              <td class="${d5.views > 0 ? 'pos' : 'neutral'}">+${d5.views}</td>
+              <td class="${dp.views > 0 ? 'pos' : 'neutral'}">+${dp.views}</td>
               <td class="${dt.views > 0 ? 'total' : 'neutral'}">+${dt.views}</td>
               <td class="raw">${c.views}</td>
             </tr>
             <tr>
               <td>❤️ 获得点赞</td>
-              <td class="${d5.likes > 0 ? 'pos' : 'neutral'}">+${d5.likes}</td>
+              <td class="${dp.likes > 0 ? 'pos' : 'neutral'}">+${dp.likes}</td>
               <td class="${dt.likes > 0 ? 'total' : 'neutral'}">+${dt.likes}</td>
               <td class="raw">${c.likes}</td>
             </tr>
             <tr>
               <td>🔁 转发推文</td>
-              <td class="${d5.retweets > 0 ? 'pos' : 'neutral'}">+${d5.retweets}</td>
+              <td class="${dp.retweets > 0 ? 'pos' : 'neutral'}">+${dp.retweets}</td>
               <td class="${dt.retweets > 0 ? 'total' : 'neutral'}">+${dt.retweets}</td>
               <td class="raw">${c.retweets}</td>
             </tr>
             <tr>
               <td>💬 参与回复</td>
-              <td class="${d5.replies > 0 ? 'pos' : 'neutral'}">+${d5.replies}</td>
+              <td class="${dp.replies > 0 ? 'pos' : 'neutral'}">+${dp.replies}</td>
               <td class="${dt.replies > 0 ? 'total' : 'neutral'}">+${dt.replies}</td>
               <td class="raw">${c.replies}</td>
             </tr>
             <tr>
               <td>🔖 书签收藏</td>
-              <td class="${d5.bookmarks > 0 ? 'pos' : 'neutral'}">+${d5.bookmarks}</td>
+              <td class="${dp.bookmarks > 0 ? 'pos' : 'neutral'}">+${dp.bookmarks}</td>
               <td class="${dt.bookmarks > 0 ? 'total' : 'neutral'}">+${dt.bookmarks}</td>
               <td class="raw">${c.bookmarks}</td>
             </tr>
@@ -430,12 +465,16 @@
         </div>
       `;
 
-      // Bind Reset Baseline button
+      // Bind Reset Baseline button with instant UI feedback
       const resetBtn = tooltip.querySelector(`.x-heat-pulse-reset-btn[data-reset-id="${tweetId}"]`);
       if (resetBtn) {
         resetBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
+          resetBtn.textContent = '✓ 已设为新基准';
+          resetBtn.style.color = '#00ba7c';
+          resetBtn.style.borderColor = '#00ba7c';
           await resetTweetBaseline(tweetId, c);
+          setTimeout(scheduleScan, 300);
         });
       }
     }
@@ -456,7 +495,7 @@
     }
   }
 
-  // Listen to DOM mutations for scrolling
+  // Listen to DOM mutations for dynamic scrolling
   const observer = new MutationObserver((mutations) => {
     let hasRelevantMutation = false;
     for (const m of mutations) {
@@ -475,8 +514,8 @@
     subtree: true
   });
 
-  // Initial scan and periodic refresh
+  // Initial scan and quick periodic rescan (every 6 seconds)
   scheduleScan();
-  setInterval(scheduleScan, 12000);
+  setInterval(scheduleScan, 6000);
 
 })();

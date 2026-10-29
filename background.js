@@ -4,8 +4,8 @@
  */
 
 const DEFAULT_CONFIG = {
-  intervalMinutes: 5,
-  alertThreshold: 50,
+  intervalMinutes: 3,
+  alertThreshold: 40,
   enableNotification: true,
   weights: {
     views: 0.01,
@@ -21,12 +21,14 @@ const DEFAULT_CONFIG = {
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[X-Heat-Pulse] Extension initialized.");
   const existing = await chrome.storage.local.get("config");
-  if (!existing.config) {
-    await chrome.storage.local.set({ config: DEFAULT_CONFIG });
+  let cfg = existing.config || DEFAULT_CONFIG;
+  if (!existing.config || existing.config.intervalMinutes === 5) {
+    cfg = { ...cfg, intervalMinutes: 3 };
+    await chrome.storage.local.set({ config: cfg });
   }
 
   // Setup periodic alarm
-  setupAlarm(DEFAULT_CONFIG.intervalMinutes);
+  setupAlarm(cfg.intervalMinutes);
 
   // Trigger immediate sample
   executePollingCycle("INSTALL_INIT").catch(err => {
