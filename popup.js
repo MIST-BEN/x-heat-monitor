@@ -1,5 +1,6 @@
 /**
  * X Heat Pulse - Popup Logic & Visualization
+ * Aggregates real in-page recorded tweet data from x.com
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -11,12 +12,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   refreshBtn.addEventListener("click", () => {
     refreshIcon.classList.add("spinning");
-    chrome.runtime.sendMessage({ action: "FORCE_POLL" }, (response) => {
-      setTimeout(() => {
-        refreshIcon.classList.remove("spinning");
-        renderData();
-      }, 500);
+    // Trigger active tab rescan and storage sync
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      if (tabs[0]?.id) {
+        chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {
+          // ignore error if tab is not on x.com
+        });
+      }
     });
+
+    setTimeout(() => {
+      refreshIcon.classList.remove("spinning");
+      renderData();
+    }, 400);
   });
 
   // Settings button click
@@ -38,96 +46,167 @@ document.addEventListener("DOMContentLoaded", () => {
 async function renderData() {
   const storage = await chrome.storage.local.get([
     "config",
-    "history",
-    "account_info",
-    "last_metrics",
-    "last_poll_status"
+    "tweet_records",
+    "history"
   ]);
 
-  const history = storage.history || [];
-  const accountInfo = storage.account_info || null;
-  const lastMetrics = storage.last_metrics || null;
+  const tweetRecords = storage.tweet_records || {};
   const config = storage.config || { intervalMinutes: 5 };
+  const history = storage.history || [];
 
-  // 1. Account info
-  if (accountInfo) {
-    document.getElementById("account-name").textContent = `@${accountInfo.screen_name || "You"}`;
-    if (accountInfo.type === "demo_simulation") {
-      document.getElementById("status-tag").textContent = "模拟数据";
-      document.getElementById("status-tag").className = "tag";
-    } else {
-      document.getElementById("status-tag").textContent = `${config.intervalMinutes}m 活跃`;
-      document.getElementById("status-tag").className = "tag live";
-    }
-  }
+  const tweetList = Object.values(tweetRecords);
 
+  // 1. Tag & Status
   document.getElementById("d-interval").textContent = `${config.intervalMinutes}m`;
 
-  // 2. Latest sample & Delta
-  if (history.length > 0) {
-    const latest = history[history.length - 1];
-    const heatDelta = latest.heatDelta || 0;
+  if (tweetList.length === 0) {
+    document.getElementById("account-name").textContent = "@X.com";
+    document.getElementById("status-tag").textContent = "等待页面数据";
+    document.getElementById("status-tag").className = "tag";
+    document.getElementById("delta-heat").textContent = "+0";
+    document.getElementById("delta-rate").textContent = "未检测到推文";
+    document.getElementById("monitored-count").textContent = "监控中: 0";
+    document.getElementById("posts-container").innerHTML = `
+      <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 20px 10px; line-height:1.6;">
+        ⚡ <b>实时标柱已激活</b><br>
+        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览你的主页或个人帖子，插件会自动在每条帖子右下角标出 5 分钟热度增量！
+      </div>
+    `;
+    document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
+    return;
+  }
 
-    document.getElementById("delta-heat").textContent = heatDelta > 0 ? `+${heatDelta}` : `${heatDelta}`;
-    
-    // Status text & color
-    const rateEl = document.getElementById("delta-rate");
-    if (heatDelta >= 100) {
-      rateEl.textContent = "🔥 极高爆发";
-      rateEl.style.background = "rgba(239, 68, 68, 0.2)";
-      rateEl.style.color = "#f87171";
-    } else if (heatDelta >= 30) {
-      rateEl.textContent = "⚡ 快速上升";
-      rateEl.style.background = "rgba(245, 158, 11, 0.2)";
-      rateEl.style.color = "#fbbf24";
-    } else if (heatDelta > 0) {
-      rateEl.textContent = "📈 稳步上升";
-      rateEl.style.background = "rgba(16, 185, 129, 0.2)";
-      rateEl.style.color = "#34d399";
-    } else {
-      rateEl.textContent = "平稳";
-      rateEl.style.background = "rgba(100, 116, 139, 0.2)";
-      rateEl.style.color = "#94a3b8";
+  document.getElementById("status-tag").textContent = "页面实时监控中";
+  document.getElementById("status-tag").className = "tag live";
+
+  // 2. Aggregate Deltas across all tracked tweets
+  let totalDeltaHeat = 0;
+  const totalBreakdown = { views: 0, likes: 0, retweets: 0, replies: 0, bookmarks: 0 };
+  const targetIntervalMs = (config.intervalMinutes || 5) * 60 * 1000;
+  const now = Date.now();
+
+  const activeTweets = [];
+
+  for (const tweet of tweetList) {
+    const snaps = tweet.snapshots || [];
+    if (snaps.length === 0) continue;
+
+    const curr = snaps[snaps.length - 1];
+
+    // Find previous snapshot ~5 mins ago
+    let prev = snaps[0];
+    const targetTimestamp = now - targetIntervalMs;
+    let minDiff = Infinity;
+
+    for (const s of snaps) {
+      const diff = Math.abs(s.t - targetTimestamp);
+      if (diff < minDiff) {
+        minDiff = diff;
+        prev = s;
+      }
     }
 
-    // Breakdown
-    const b = latest.breakdown || {};
-    document.getElementById("d-likes").textContent = `+${b.likes || 0}`;
-    document.getElementById("d-rts").textContent = `+${b.retweets || 0}`;
-    document.getElementById("d-replies").textContent = `+${b.replies || 0}`;
-    document.getElementById("d-bookmarks").textContent = `+${b.bookmarks || 0}`;
-    document.getElementById("d-views").textContent = `+${b.views || 0}`;
+    const dViews = Math.max(0, curr.views - prev.views);
+    const dLikes = Math.max(0, curr.likes - prev.likes);
+    const dRetweets = Math.max(0, curr.retweets - prev.retweets);
+    const dReplies = Math.max(0, curr.replies - prev.replies);
+    const dBookmarks = Math.max(0, curr.bookmarks - prev.bookmarks);
 
-    // Timestamp
-    const timeStr = new Date(latest.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    document.getElementById("last-update").textContent = `最近采样: ${timeStr}`;
+    const heatDelta = Math.round(
+      dViews * 0.01 +
+      dLikes * 2.0 +
+      dRetweets * 5.0 +
+      dReplies * 3.0 +
+      dBookmarks * 4.0
+    );
 
-    // Draw sparkline
-    drawSparkline(history.slice(-16));
+    totalBreakdown.views += dViews;
+    totalBreakdown.likes += dLikes;
+    totalBreakdown.retweets += dRetweets;
+    totalBreakdown.replies += dReplies;
+    totalBreakdown.bookmarks += dBookmarks;
+    totalDeltaHeat += heatDelta;
+
+    activeTweets.push({
+      id: tweet.id,
+      author: tweet.author,
+      text: tweet.text || "推文",
+      heatDelta,
+      current: curr,
+      delta: { views: dViews, likes: dLikes, retweets: dRetweets, replies: dReplies, bookmarks: dBookmarks }
+    });
+  }
+
+  // Account display
+  if (activeTweets.length > 0 && activeTweets[0].author) {
+    document.getElementById("account-name").textContent = `@${activeTweets[0].author}`;
+  }
+
+  // Delta Card
+  document.getElementById("delta-heat").textContent = totalDeltaHeat > 0 ? `+${totalDeltaHeat}` : `${totalDeltaHeat}`;
+  
+  const rateEl = document.getElementById("delta-rate");
+  if (totalDeltaHeat >= 100) {
+    rateEl.textContent = "🔥 极高爆发";
+    rateEl.style.background = "rgba(239, 68, 68, 0.2)";
+    rateEl.style.color = "#f87171";
+  } else if (totalDeltaHeat >= 30) {
+    rateEl.textContent = "⚡ 快速上升";
+    rateEl.style.background = "rgba(245, 158, 11, 0.2)";
+    rateEl.style.color = "#fbbf24";
+  } else if (totalDeltaHeat > 0) {
+    rateEl.textContent = "📈 稳步上升";
+    rateEl.style.background = "rgba(16, 185, 129, 0.2)";
+    rateEl.style.color = "#34d399";
   } else {
-    document.getElementById("last-update").textContent = "采样准备中...";
+    rateEl.textContent = "采样基准就绪";
+    rateEl.style.background = "rgba(100, 116, 139, 0.2)";
+    rateEl.style.color = "#94a3b8";
   }
 
-  // 3. Render Monitored Tweets
-  if (lastMetrics && lastMetrics.data && lastMetrics.data.length > 0) {
-    document.getElementById("monitored-count").textContent = `监控中: ${lastMetrics.data.length}`;
-    renderPostsList(lastMetrics.data);
-  }
+  // Breakdown
+  document.getElementById("d-likes").textContent = `+${totalBreakdown.likes}`;
+  document.getElementById("d-rts").textContent = `+${totalBreakdown.retweets}`;
+  document.getElementById("d-replies").textContent = `+${totalBreakdown.replies}`;
+  document.getElementById("d-bookmarks").textContent = `+${totalBreakdown.bookmarks}`;
+  document.getElementById("d-views").textContent = `+${totalBreakdown.views}`;
+
+  // Time
+  document.getElementById("last-update").textContent = `采样更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+
+  // Sort active tweets by heat delta descending
+  activeTweets.sort((a, b) => b.heatDelta - a.heatDelta || (b.current.views - a.current.views));
+
+  // Render list
+  document.getElementById("monitored-count").textContent = `已捕获: ${activeTweets.length} 条`;
+  renderPostsList(activeTweets);
+
+  // Sparkline from history
+  drawSparkline(activeTweets.map(t => ({ heatDelta: t.heatDelta })));
 }
 
 function renderPostsList(tweets) {
   const container = document.getElementById("posts-container");
   container.innerHTML = "";
 
-  tweets.slice(0, 5).forEach((t, idx) => {
+  tweets.slice(0, 6).forEach((t) => {
     const card = document.createElement("div");
     card.className = "post-card";
-    const m = t.metrics || {};
+    const c = t.current || {};
+    const d = t.delta || {};
+
+    const deltaBadges = [];
+    if (d.likes > 0) deltaBadges.push(`赞+${d.likes}`);
+    if (d.retweets > 0) deltaBadges.push(`转+${d.retweets}`);
+    if (d.views > 0) deltaBadges.push(`阅+${d.views}`);
+
+    const deltaSummary = deltaBadges.length > 0 ? deltaBadges.join(" · ") : "5m稳定";
+
     card.innerHTML = `
-      <div class="post-text">${escapeHtml(t.text || "推文内容")}</div>
+      <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ ${formatNumber(m.views)} · ❤️ ${formatNumber(m.likes)} · 🔁 ${formatNumber(m.retweets)}</span>
-        <span class="post-delta">#${idx + 1}</span>
+        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)} · 🔁 ${formatNumber(c.retweets)}</span>
+        <span class="post-delta" style="${t.heatDelta > 0 ? 'color:#00ba7c;' : ''}">Δ ${deltaSummary}</span>
       </div>
     `;
     container.appendChild(card);
@@ -158,15 +237,12 @@ function drawSparkline(points) {
     return { x, y };
   });
 
-  // Construct SVG path
   let pathD = `M ${coords[0].x} ${coords[0].y}`;
   for (let i = 1; i < coords.length; i++) {
     pathD += ` L ${coords[i].x} ${coords[i].y}`;
   }
 
   path.setAttribute("d", pathD);
-
-  // Area path (closed at the bottom)
   const areaD = `${pathD} L ${coords[coords.length - 1].x} ${height} L ${coords[0].x} ${height} Z`;
   area.setAttribute("d", areaD);
 }

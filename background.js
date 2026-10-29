@@ -79,24 +79,57 @@ async function executePollingCycle(source = "SCHEDULED") {
   const timestamp = Date.now();
   console.log(`[X-Heat-Pulse] Starting polling cycle. Source: ${source}, Time: ${new Date(timestamp).toISOString()}`);
 
-  const storage = await chrome.storage.local.get(["config", "last_metrics", "history", "account_info"]);
+  const storage = await chrome.storage.local.get(["config", "last_metrics", "history", "account_info", "tweet_records"]);
   const config = storage.config || DEFAULT_CONFIG;
   const history = storage.history || [];
   const lastMetrics = storage.last_metrics || null;
+  const tweetRecords = storage.tweet_records || {};
 
   try {
-    // Collect metrics from X
-    const metricResult = await fetchXMetrics(config);
+    let currentData = [];
+    let accountInfo = storage.account_info || null;
 
-    if (!metricResult || !metricResult.tweets || metricResult.tweets.length === 0) {
-      console.warn("[X-Heat-Pulse] No tweets returned or account not authenticated.");
-      chrome.action.setBadgeText({ text: "ERR" });
-      chrome.action.setBadgeBackgroundColor({ color: "#EF4444" });
-      return null;
+    // Priority 1: Check if we have real in-page captured tweet records from content_script
+    const recordKeys = Object.keys(tweetRecords);
+    if (recordKeys.length > 0) {
+      currentData = recordKeys.map(k => {
+        const item = tweetRecords[k];
+        const lastSnap = item.snapshots && item.snapshots.length > 0 ? item.snapshots[item.snapshots.length - 1] : {};
+        return {
+          id: item.id || k,
+          text: item.text || "",
+          metrics: {
+            views: lastSnap.views || 0,
+            likes: lastSnap.likes || 0,
+            retweets: lastSnap.retweets || 0,
+            replies: lastSnap.replies || 0,
+            bookmarks: lastSnap.bookmarks || 0
+          }
+        };
+      });
+
+      if (!accountInfo && tweetRecords[recordKeys[0]].author) {
+        accountInfo = {
+          screen_name: tweetRecords[recordKeys[0]].author,
+          name: tweetRecords[recordKeys[0]].author,
+          type: "in_page_observer"
+        };
+      }
+    } else {
+      // Priority 2: Fallback to session / API fetch
+      const metricResult = await fetchXMetrics(config);
+      if (metricResult && metricResult.tweets) {
+        currentData = metricResult.tweets;
+        accountInfo = metricResult.account;
+      }
     }
 
-    const currentData = metricResult.tweets;
-    const accountInfo = metricResult.account;
+    if (!currentData || currentData.length === 0) {
+      console.warn("[X-Heat-Pulse] No tweets available yet. Waiting for x.com page visit.");
+      chrome.action.setBadgeText({ text: "0" });
+      chrome.action.setBadgeBackgroundColor({ color: "#64748B" });
+      return null;
+    }
 
     // Differential Calculation
     let totalDeltaHeat = 0;
