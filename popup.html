@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>X Heat Pulse</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", monospace;
+      background: #0b0f19;
+      color: #f1f5f9;
+      padding: 14px;
+      user-select: none;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      font-size: 14px;
+      color: #38bdf8;
+      letter-spacing: -0.5px;
+    }
+    .brand svg {
+      width: 18px;
+      height: 18px;
+      fill: #38bdf8;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: #1e293b;
+      color: #94a3b8;
+    }
+    .tag.live {
+      background: rgba(16, 185, 129, 0.15);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .btn-icon {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 4px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+    .btn-icon:hover {
+      color: #f8fafc;
+      background: #1e293b;
+    }
+    .spinning {
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Main Delta Card */
+    .hero-card {
+      background: linear-gradient(135deg, #111827 0%, #1e1e38 100%);
+      border: 1px solid #312e81;
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .hero-label {
+      font-size: 11px;
+      color: #a5b4fc;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .hero-val-container {
+      display: flex;
+      align-items: baseline;
+      margin-top: 6px;
+      gap: 8px;
+    }
+    .hero-val {
+      font-size: 32px;
+      font-weight: 800;
+      color: #38bdf8;
+      font-feature-settings: "tnum";
+    }
+    .hero-unit {
+      font-size: 12px;
+      color: #64748b;
+    }
+    .hero-burst {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    /* Sparkline Chart */
+    .sparkline-container {
+      margin-top: 10px;
+      width: 100%;
+      height: 42px;
+    }
+    svg.sparkline {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .sparkline-path {
+      fill: none;
+      stroke: #38bdf8;
+      stroke-width: 2;
+      stroke-linecap: round;
+    }
+    .sparkline-area {
+      fill: url(#chart-gradient);
+    }
+
+    /* Metric Grid */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .metric-item {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 6px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .metric-item .title {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-bottom: 2px;
+    }
+    .metric-item .delta {
+      font-size: 15px;
+      font-weight: 700;
+      color: #10b981;
+      font-feature-settings: "tnum";
+    }
+
+    /* Top Posts */
+    .section-title {
+      font-size: 11px;
+      color: #64748b;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .posts-list {
+      max-height: 130px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .post-card {
+      background: #111827;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 8px;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .post-text {
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 4px;
+    }
+    .post-stats {
+      display: flex;
+      justify-content: space-between;
+      color: #64748b;
+      font-size: 10px;
+    }
+    .post-delta {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    /* Footer */
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: #475569;
+      padding-top: 8px;
+      border-top: 1px solid #1e293b;
+    }
+    .footer a {
+      color: #38bdf8;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="brand">
+      <svg viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+      <span>X Heat Pulse</span>
+    </div>
+    <div class="header-actions">
+      <span class="tag live" id="status-tag">5min Δ</span>
+      <button class="btn-icon" id="btn-refresh" title="立即采样 (强制刷新)">
+        <svg id="icon-refresh" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+      </button>
+      <button class="btn-icon" id="btn-settings" title="配置权重与采样参数">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Hero Delta Card -->
+  <div class="hero-card">
+    <div class="hero-label">
+      <span>近5分钟热度增量 (ΔHeat)</span>
+      <span id="account-name">@--</span>
+    </div>
+    <div class="hero-val-container">
+      <span class="hero-val" id="delta-heat">+0</span>
+      <span class="hero-unit">pts/5min</span>
+      <span class="hero-burst" id="delta-rate">稳定平缓</span>
+    </div>
+
+    <!-- Sparkline -->
+    <div class="sparkline-container">
+      <svg class="sparkline" id="sparkline-svg" viewBox="0 0 320 40">
+        <defs>
+          <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="sparkline-area" id="sparkline-area" d=""/>
+        <path class="sparkline-path" id="sparkline-path" d=""/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- 5-Metric Breakdown Grid -->
+  <div class="metric-grid">
+    <div class="metric-item">
+      <div class="title">赞 (Likes)</div>
+      <div class="delta" id="d-likes">+0</div>
+    </div>
+    <div class="metric-item">
+      <div class="title">转 (Retweets)</div>
+      <div class="delta" id="d-rts">+0</div>
+    </div>
+    <div class="metric-item">
+      <div class="title">评 (Replies)</div>
+      <div class="delta" id="d-replies">+0</div>
+    </div>
+    <div class="metric-item">
+      <div class="title">藏 (Bookmarks)</div>
+      <div class="delta" id="d-bookmarks">+0</div>
+    </div>
+    <div class="metric-item">
+      <div class="title">阅 (Views)</div>
+      <div class="delta" id="d-views">+0</div>
+    </div>
+    <div class="metric-item">
+      <div class="title">采样周期</div>
+      <div class="delta" style="color:#94a3b8; font-size:13px;" id="d-interval">5m</div>
+    </div>
+  </div>
+
+  <!-- Top Monitored Posts -->
+  <div class="section-title">
+    <span>活跃帖子吞吐</span>
+    <span id="monitored-count">监控中: 0</span>
+  </div>
+  <div class="posts-list" id="posts-container">
+    <div style="color:#64748b; text-align:center; padding: 20px 0;">正在收集时序样本...</div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <span id="last-update">采样时间: --</span>
+    <a id="link-options">参数配置</a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

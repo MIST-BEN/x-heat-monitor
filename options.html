@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>X Heat Pulse - 参数设置</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0b0f19;
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      padding: 30px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 20px;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    p.desc {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 24px;
+    }
+    .section {
+      background: #111827;
+      border: 1px solid #1f2937;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 6px;
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    input[type="number"], input[type="text"], select {
+      width: 100%;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    input[type="number"]:focus, input[type="text"]:focus, select:focus {
+      border-color: #38bdf8;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+    }
+    .checkbox-group input {
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+    .btn-save {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-save:hover {
+      background: #0369a1;
+    }
+    .status-msg {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #10b981;
+      display: none;
+    }
+    .note {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>
+    <span>⚙️ X Heat Pulse 参数配置</span>
+  </h1>
+  <p class="desc">网络工程师视角下的热度模型调优与时序采样参数配置</p>
+
+  <div class="section">
+    <div class="section-title">⏱️ 采样频率与告警</div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="intervalMinutes">采样周期 (分钟)</label>
+        <select id="intervalMinutes">
+          <option value="1">1 分钟 (极速检测)</option>
+          <option value="2">2 分钟</option>
+          <option value="5" selected>5 分钟 (推荐标准)</option>
+          <option value="10">10 分钟</option>
+          <option value="15">15 分钟</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="alertThreshold">热度爆发告警阈值 (ΔHeat)</label>
+        <input type="number" id="alertThreshold" value="50" min="1" max="1000">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="checkbox-group">
+        <input type="checkbox" id="enableNotification" checked>
+        <span>当 5 分钟增量超过阈值时发送系统弹窗提醒</span>
+      </label>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">📐 热度差分权重模型 (ΔHeat Formula)</div>
+    <p class="note" style="margin-bottom:12px;">公式: ΔHeat = w_l·ΔLikes + w_r·ΔRetweets + w_c·ΔReplies + w_b·ΔBookmarks + w_v·ΔViews</p>
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="w-likes">点赞权重 (Likes)</label>
+        <input type="number" id="w-likes" value="2.0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label for="w-retweets">转发权重 (Retweets)</label>
+        <input type="number" id="w-retweets" value="5.0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label for="w-replies">回复权重 (Replies)</label>
+        <input type="number" id="w-replies" value="3.0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label for="w-bookmarks">书签收藏权重 (Bookmarks)</label>
+        <input type="number" id="w-bookmarks" value="4.0" step="0.5">
+      </div>
+      <div class="form-group">
+        <label for="w-views">阅读展示曝光权重 (Views)</label>
+        <input type="number" id="w-views" value="0.01" step="0.005">
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🔑 认证与网络数据源 (可选)</div>
+    <div class="form-group">
+      <label for="apiToken">官方 X API v2 Bearer Token (留空则使用本地浏览器 Cookie 会话)</label>
+      <input type="text" id="apiToken" placeholder="AAAAAAAAAAAAAAAAAAAAA...">
+      <div class="note">默认为空即可。插件会自动复用您在 x.com 已登录的 Web 会话凭证进行免密采集。</div>
+    </div>
+  </div>
+
+  <button class="btn-save" id="btn-save">保存所有配置</button>
+  <span class="status-msg" id="status-msg">✓ 配置已持久化，5分钟周期定时器已重新同步！</span>
+
+  <script src="options.js"></script>
+</body>
+</html>
