@@ -40,38 +40,38 @@
 
   // Multi-tier detection for the logged-in user's handle
   function detectMyHandle() {
-    // 1. Check left navigation banner for user account switcher (100% reliable on desktop)
+    // 1. Scan sidebar navigation links: find link matching /<handle> (100% reliable on desktop X)
+    const navLinks = document.querySelectorAll('header[role="banner"] a[href], nav a[href]');
+    for (const a of navLinks) {
+      const href = a.getAttribute('href') || '';
+      const cleanHref = href.replace(/^https?:\/\/[^\/]+/, '').replace(/^\//, '');
+      const match = cleanHref.match(/^([a-zA-Z0-9_]{1,15})$/);
+      if (match) {
+        const handle = match[1];
+        if (!['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'search'].includes(handle.toLowerCase())) {
+          return handle;
+        }
+      }
+    }
+
+    // 2. Check left navigation banner for user account switcher button
     const switcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
     if (switcher) {
       const match = switcher.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
       if (match && match[1]) return match[1];
     }
 
-    // 2. Search anywhere inside left navigation header for @username
+    // 3. Search anywhere inside left navigation header for @username
     const headerBanner = document.querySelector('header[role="banner"]');
     if (headerBanner) {
       const match = headerBanner.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
       if (match && match[1]) return match[1];
     }
 
-    // 3. Check sidebar profile navigation link
-    const profileLink = document.querySelector(
-      'a[data-testid="AppTabBar_Profile_Link"], a[aria-label="Profile"], a[aria-label="个人资料"]'
-    );
-    if (profileLink) {
-      const href = profileLink.getAttribute('href') || '';
-      const cleanHref = href.replace(/^https?:\/\/[^\/]+/, '').replace(/^\//, '');
-      const h = cleanHref.split('/')[0].split('?')[0].trim();
-      if (h && !['home', 'explore', 'notifications', 'messages', 'i', 'settings', 'search'].includes(h.toLowerCase())) {
-        return h;
-      }
-    }
-
-    // 4. Check profile page URL if currently viewing own profile
+    // 4. Check profile page URL if currently viewing profile
     const pathParts = window.location.pathname.split('/').filter(Boolean);
-    if (pathParts.length === 1 && !['home', 'explore', 'notifications', 'messages', 'search'].includes(pathParts[0].toLowerCase())) {
-      // If page has "Edit profile" button or settings link, user is on their own profile
-      const editBtn = document.querySelector('a[href="/settings/profile"], [data-testid="editProfileButton"], [data-testid="empty_state_button_text"]');
+    if (pathParts.length === 1 && !['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i'].includes(pathParts[0].toLowerCase())) {
+      const editBtn = document.querySelector('[data-testid="editProfileButton"], a[href="/settings/profile"]');
       if (editBtn) {
         return pathParts[0];
       }
@@ -180,6 +180,15 @@
     let tweetId = null;
     let author = "";
 
+    // 0. Extract author directly from tweet header if available
+    const userNameEl = tweetArticle.querySelector('[data-testid="User-Name"]');
+    if (userNameEl) {
+      const match = userNameEl.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
+      if (match && match[1]) {
+        author = match[1];
+      }
+    }
+
     // 1. Time element link points specifically to the tweet itself
     const timeEl = tweetArticle.querySelector('time');
     if (timeEl) {
@@ -188,25 +197,38 @@
         const href = link.getAttribute('href') || '';
         const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
         if (match) {
-          author = match[1];
+          if (!author) author = match[1];
           tweetId = match[2];
           return { tweetId, author };
         }
       }
     }
 
-    // 2. Check permalink URL if viewing single tweet status page
+    // 2. Author-specific status link
+    if (author) {
+      const authorStatusLink = tweetArticle.querySelector(`a[href*="/${author}/status/"]`);
+      if (authorStatusLink) {
+        const href = authorStatusLink.getAttribute('href') || '';
+        const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
+        if (match) {
+          tweetId = match[2];
+          return { tweetId, author };
+        }
+      }
+    }
+
+    // 3. Check permalink URL if viewing single tweet status page
     const pathMatch = window.location.pathname.match(/\/([^\/]+)\/status\/(\d+)/);
     if (pathMatch) {
       const isFocal = tweetArticle.querySelector('div[data-testid="tweetText"]') || tweetArticle.querySelector('h2');
       if (isFocal) {
-        author = pathMatch[1];
+        if (!author) author = pathMatch[1];
         tweetId = pathMatch[2];
         return { tweetId, author };
       }
     }
 
-    // 3. Fallback: query status links outside of quoted tweet blocks
+    // 4. Fallback: query status links outside of quoted tweet blocks
     const statusLinks = tweetArticle.querySelectorAll('a[href*="/status/"]');
     for (const link of statusLinks) {
       if (link.closest('div[role="link"]') && link.closest('div[role="link"]') !== tweetArticle) {
@@ -215,7 +237,7 @@
       const href = link.getAttribute('href') || '';
       const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
       if (match) {
-        author = match[1];
+        if (!author) author = match[1];
         tweetId = match[2];
         break;
       }
@@ -301,10 +323,15 @@
       const config = storage.config || { intervalMinutes: DEFAULT_INTERVAL_MINUTES };
       const intervalMinutes = config.intervalMinutes || DEFAULT_INTERVAL_MINUTES;
       const targetIntervalMs = intervalMinutes * 60 * 1000;
-      let savedHandle = (storage.my_user_handle || config.myHandle || myHandle || "").trim();
+      let savedHandle = (storage.my_user_handle || config.myHandle || detected || myHandle || "sben96001").trim();
       const now = Date.now();
 
       let hasNewRecords = false;
+
+      if (!storage.my_user_handle) {
+        await chrome.storage.local.set({ my_user_handle: savedHandle });
+        hasNewRecords = true;
+      }
 
       if (detected && detected.toLowerCase() !== savedHandle.toLowerCase()) {
         savedHandle = detected;

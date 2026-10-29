@@ -5,11 +5,9 @@
 document.addEventListener("DOMContentLoaded", async () => {
   const storage = await chrome.storage.local.get(["config", "my_user_handle"]);
   const config = storage.config;
-  const myHandle = storage.my_user_handle || (config ? config.myHandle : "");
+  const myHandle = storage.my_user_handle || (config ? config.myHandle : "") || "sben96001";
 
-  if (myHandle) {
-    document.getElementById("myHandle").value = myHandle;
-  }
+  document.getElementById("myHandle").value = myHandle;
 
   if (config) {
     document.getElementById("intervalMinutes").value = config.intervalMinutes || 3;

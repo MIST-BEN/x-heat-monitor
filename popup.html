@@ -105,6 +105,34 @@
       font-weight: 600;
       display: flex;
       justify-content: space-between;
+      align-items: center;
+    }
+    .account-selector {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 9999px;
+      padding: 2px 8px;
+      color: #38bdf8;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      text-transform: none;
+    }
+    .account-selector:hover {
+      background: rgba(56, 189, 248, 0.22);
+      border-color: #38bdf8;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+    }
+    .account-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
     }
     .hero-val-container {
       display: flex;
@@ -293,6 +321,97 @@
     .footer a:hover {
       color: #7dd3fc;
     }
+
+    /* Account Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 99999;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.open {
+      display: flex;
+    }
+    .modal-card {
+      background: #090e18;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 12px;
+      padding: 16px;
+      width: 100%;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95);
+    }
+    .modal-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 6px;
+    }
+    .modal-desc {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .modal-input-group {
+      display: flex;
+      align-items: center;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 0 10px;
+      margin-bottom: 14px;
+    }
+    .modal-input-group:focus-within {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    .modal-prefix {
+      color: #64748b;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    #modal-handle-input {
+      background: transparent;
+      border: none;
+      color: #f8fafc;
+      padding: 8px 6px;
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .btn-modal-cancel {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #94a3b8;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .btn-modal-save {
+      background: #0284c7;
+      border: none;
+      color: #ffffff;
+      border-radius: 6px;
+      padding: 6px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-modal-save:hover {
+      background: #0369a1;
+    }
   </style>
 </head>
 <body>
@@ -317,7 +436,11 @@
   <div class="hero-card">
     <div class="hero-label">
       <span id="label-delta-title">近3分钟曝光增量</span>
-      <span id="account-name">@--</span>
+      <div class="account-selector" id="account-btn" title="点击切换或修改监控账号">
+        <span class="account-dot"></span>
+        <span id="account-name">@sben96001</span>
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
     </div>
     <div class="hero-val-container">
       <span class="hero-val" id="delta-heat">+0</span>
@@ -387,6 +510,22 @@
   <div class="footer">
     <span id="last-update">采样更新: --</span>
     <a id="link-options">⚙️ 偏好设置</a>
+  </div>
+
+  <!-- Quick Account Edit Modal -->
+  <div class="modal-overlay" id="account-modal">
+    <div class="modal-card">
+      <div class="modal-title">👤 绑定要监控的 X 创作者账号</div>
+      <div class="modal-desc">输入您的 X 用户名（无需包含 @），插件将专属追踪此账号推文的曝光浏览与增量！</div>
+      <div class="modal-input-group">
+        <span class="modal-prefix">@</span>
+        <input type="text" id="modal-handle-input" placeholder="sben96001" value="sben96001" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" id="btn-modal-cancel">取消</button>
+        <button class="btn-modal-save" id="btn-modal-save">锁定并监控此账号</button>
+      </div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

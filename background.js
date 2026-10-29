@@ -8,6 +8,7 @@ const DEFAULT_CONFIG = {
   intervalMinutes: 3,
   alertThreshold: 40,
   enableNotification: true,
+  myHandle: "sben96001",
   weights: {
     views: 0.01,
     likes: 2.0,
@@ -21,11 +22,14 @@ const DEFAULT_CONFIG = {
 // 1. Extension Lifecycle: setup alarms, defaults, and auto-inject into open tabs
 chrome.runtime.onInstalled.addListener(async () => {
   console.log("[X-Heat-Pulse] Extension initialized/updated.");
-  const existing = await chrome.storage.local.get("config");
+  const existing = await chrome.storage.local.get(["config", "my_user_handle"]);
   let cfg = existing.config || DEFAULT_CONFIG;
   if (!existing.config || existing.config.intervalMinutes === 5) {
-    cfg = { ...cfg, intervalMinutes: 3 };
+    cfg = { ...cfg, intervalMinutes: 3, myHandle: cfg.myHandle || "sben96001" };
     await chrome.storage.local.set({ config: cfg });
+  }
+  if (!existing.my_user_handle) {
+    await chrome.storage.local.set({ my_user_handle: "sben96001" });
   }
 
   // Setup periodic alarm
@@ -105,7 +109,7 @@ async function executePollingCycle(source = "SCHEDULED") {
   const config = storage.config || DEFAULT_CONFIG;
   const history = storage.history || [];
   const tweetRecords = storage.tweet_records || {};
-  const myHandle = (storage.my_user_handle || config.myHandle || "").trim().toLowerCase();
+  const myHandle = (storage.my_user_handle || config.myHandle || "sben96001").trim().toLowerCase();
 
   try {
     const allRecords = Object.values(tweetRecords);

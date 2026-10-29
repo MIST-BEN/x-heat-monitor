@@ -2,39 +2,23 @@
  * X Heat Pulse - Popup Logic & Visualization (v1.4.2)
  * Aggregates real in-page recorded tweet data from x.com
  * Supports strictly filtering and monitoring the user's OWN tweets.
- * Built-in active tab handle detector & one-click account binding.
+ * Pre-binds @sben96001 by default with interactive 1-click handle modification.
  */
 
 let currentTab = "own"; // 'own' (default) or 'all'
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Check active tab to auto-bind user handle if viewing own profile
-  try {
-    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
-      const tab = tabs[0];
-      if (tab && tab.url) {
-        try {
-          const url = new URL(tab.url);
-          if (url.hostname === "x.com" || url.hostname === "twitter.com") {
-            const parts = url.pathname.split('/').filter(Boolean);
-            if (parts.length === 1 && !['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i'].includes(parts[0].toLowerCase())) {
-              const pageHandle = parts[0];
-              const storage = await chrome.storage.local.get("my_user_handle");
-              if (!storage.my_user_handle) {
-                await bindHandleAndRetag(pageHandle);
-                return;
-              }
-            }
-          }
-        } catch (e) {}
-      }
-      renderData();
-    });
-  } catch (e) {
+  // 1. Check active tab or auto-bind default handle (@sben96001)
+  const storage = await chrome.storage.local.get(["my_user_handle", "config"]);
+  let activeHandle = storage.my_user_handle || (storage.config ? storage.config.myHandle : "") || "sben96001";
+
+  if (!storage.my_user_handle) {
+    await bindHandleAndRetag(activeHandle);
+  } else {
     renderData();
   }
 
-  // Scope Tab Clicks
+  // 2. Scope Tab Clicks
   const tabOwn = document.getElementById("tab-own");
   const tabAll = document.getElementById("tab-all");
 
@@ -56,7 +40,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Refresh button click
+  // 3. Refresh button click
   const refreshBtn = document.getElementById("btn-refresh");
   const refreshIcon = document.getElementById("icon-refresh");
 
@@ -76,7 +60,49 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Settings button click
+  // 4. Account Switcher Modal Handlers
+  const accountBtn = document.getElementById("account-btn");
+  const modal = document.getElementById("account-modal");
+  const cancelBtn = document.getElementById("btn-modal-cancel");
+  const saveBtn = document.getElementById("btn-modal-save");
+  const inputEl = document.getElementById("modal-handle-input");
+
+  if (accountBtn && modal) {
+    accountBtn.addEventListener("click", async () => {
+      const cur = await chrome.storage.local.get("my_user_handle");
+      inputEl.value = cur.my_user_handle || "sben96001";
+      modal.classList.add("open");
+      inputEl.focus();
+    });
+  }
+
+  if (cancelBtn && modal) {
+    cancelBtn.addEventListener("click", () => {
+      modal.classList.remove("open");
+    });
+  }
+
+  if (saveBtn && modal && inputEl) {
+    saveBtn.addEventListener("click", async () => {
+      const val = inputEl.value.trim().replace(/^@/, '');
+      if (val) {
+        modal.classList.remove("open");
+        await bindHandleAndRetag(val);
+      }
+    });
+
+    inputEl.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        const val = inputEl.value.trim().replace(/^@/, '');
+        if (val) {
+          modal.classList.remove("open");
+          await bindHandleAndRetag(val);
+        }
+      }
+    });
+  }
+
+  // 5. Settings button click
   const settingsBtn = document.getElementById("btn-settings");
   const optionsLink = document.getElementById("link-options");
 
@@ -95,6 +121,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function bindHandleAndRetag(handle) {
   const clean = handle.replace(/^@/, '').trim();
   if (!clean) return;
+
   const storage = await chrome.storage.local.get(["tweet_records", "config"]);
   const records = storage.tweet_records || {};
 
@@ -104,16 +131,24 @@ async function bindHandleAndRetag(handle) {
     }
   }
 
+  const newConfig = { ...(storage.config || { intervalMinutes: 3 }), myHandle: clean };
+
   await chrome.storage.local.set({
     my_user_handle: clean,
+    config: newConfig,
     tweet_records: records
   });
 
-  // Notify active tab
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    if (tabs[0]?.id) {
-      chrome.tabs.sendMessage(tabs[0].id, { action: "SET_HANDLE", handle: clean }, () => {});
-    }
+  // Notify background service worker to update polling & alarms
+  chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: newConfig }, () => {});
+
+  // Notify active tabs
+  chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
+    tabs.forEach(tab => {
+      if (tab.id) {
+        chrome.tabs.sendMessage(tab.id, { action: "SET_HANDLE", handle: clean }, () => {});
+      }
+    });
   });
 
   renderData();
@@ -129,7 +164,7 @@ async function renderData() {
   const tweetRecords = storage.tweet_records || {};
   const config = storage.config || { intervalMinutes: 3 };
   const intervalM = config.intervalMinutes || 3;
-  const myHandle = (storage.my_user_handle || config.myHandle || "").trim();
+  const myHandle = (storage.my_user_handle || config.myHandle || "sben96001").trim();
   const tweetList = Object.values(tweetRecords);
 
   const dIntervalEl = document.getElementById("d-interval");
@@ -144,14 +179,10 @@ async function renderData() {
   const unitEl = document.getElementById("label-delta-unit");
   if (unitEl) unitEl.textContent = `次曝光/${intervalM}m`;
 
-  // Always display user's own handle on the top-right of hero card
+  // Always display user's own handle on the hero card
   const accountNameEl = document.getElementById("account-name");
   if (accountNameEl) {
-    if (myHandle) {
-      accountNameEl.textContent = `@${myHandle}`;
-    } else {
-      accountNameEl.textContent = "@我的账号";
-    }
+    accountNameEl.textContent = `@${myHandle}`;
   }
 
   // 1. Separate own tweets from external feed tweets
@@ -170,7 +201,7 @@ async function renderData() {
   // Choose display list based on active tab
   const targetList = currentTab === "own" ? ownTweets : tweetList;
 
-  // If no tweets at all
+  // If no tweets at all in storage
   if (tweetList.length === 0) {
     document.getElementById("status-tag").textContent = "等待页面数据";
     document.getElementById("status-tag").className = "tag";
@@ -180,7 +211,8 @@ async function renderData() {
     document.getElementById("posts-container").innerHTML = `
       <div style="color:#94a3b8; font-size:11px; text-align:center; padding: 22px 10px; line-height:1.6;">
         ⚡ <b>实时监控就绪</b><br>
-        请在浏览器中打开 <a href="https://x.com" target="_blank" style="color:#38bdf8;">x.com</a> 并浏览推文，插件将自动在推文旁标出 ${intervalM} 分钟增量与累计总增量！
+        当前正在专属监控 <b style="color:#38bdf8;">@${myHandle}</b>。<br>
+        请在浏览器中打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8;">x.com/${myHandle}</a> 浏览主页，推文旁将自动标出专属增量！
       </div>
     `;
     document.getElementById("last-update").textContent = "打开 x.com 即可实时标记";
@@ -189,10 +221,10 @@ async function renderData() {
 
   // If user selected "我的帖子" but has not matched own tweets yet
   if (currentTab === "own" && ownTweets.length === 0) {
-    document.getElementById("status-tag").textContent = "专属监控就绪";
-    document.getElementById("status-tag").className = "tag";
+    document.getElementById("status-tag").textContent = "专属监控中";
+    document.getElementById("status-tag").className = "tag live";
     document.getElementById("delta-heat").textContent = "+0";
-    document.getElementById("delta-rate").textContent = "等待专属发帖";
+    document.getElementById("delta-rate").textContent = "等待主页浏览";
     document.getElementById("monitored-count").textContent = "我的帖子: 0";
 
     // Zero out grid
@@ -202,42 +234,45 @@ async function renderData() {
     document.getElementById("d-bookmarks").textContent = "+0";
     document.getElementById("d-views").textContent = "+0";
 
-    const candidateHandle = myHandle || (tweetList[0]?.author) || "sben96001";
-
     document.getElementById("posts-container").innerHTML = `
       <div style="background:rgba(56,189,248,0.06); border:1px dashed rgba(56,189,248,0.25); border-radius:10px; padding:16px 12px; text-align:center; color:#94a3b8; font-size:11px; line-height:1.7;">
         <div style="font-size:24px; margin-bottom:4px;">👤</div>
-        <b style="color:#38bdf8; font-size:12.5px;">专属账号推文监控已开启</b><br>
-        当前已记录 ${tweetList.length} 条推文。若这是您的主账号，可点击直接绑定：
+        <b style="color:#38bdf8; font-size:12.5px;">专属账号已锁定: @${myHandle}</b><br>
+        当前在信息流已缓存 ${tweetList.length} 条推文。<br>
+        请在 X 打开 <a href="https://x.com/${myHandle}" target="_blank" style="color:#38bdf8; text-decoration:underline;">个人主页 (Profile)</a> 浏览自己的推文，即可立即呈现！
         <div style="margin-top:10px; display:flex; justify-content:center; gap:8px;">
-          <button id="btn-quick-bind" style="background:#0284c7; border:none; color:#fff; border-radius:6px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer;">
-            绑定 @${candidateHandle}
+          <button id="btn-force-scan" style="background:#0284c7; border:none; color:#fff; border-radius:6px; padding:5px 12px; font-size:11px; font-weight:600; cursor:pointer;">
+            🔄 立即扫描主页推文
           </button>
-          <button id="btn-show-feed" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; border-radius:6px; padding:5px 12px; font-size:11px; cursor:pointer;">
-            查看信息流 (${tweetList.length})
+          <button id="btn-change-handle" style="background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); color:#cbd5e1; border-radius:6px; padding:5px 12px; font-size:11px; cursor:pointer;">
+            切换账号
           </button>
         </div>
       </div>
     `;
 
-    const quickBindBtn = document.getElementById("btn-quick-bind");
-    if (quickBindBtn) {
-      quickBindBtn.addEventListener("click", async () => {
-        await bindHandleAndRetag(candidateHandle);
+    const forceScanBtn = document.getElementById("btn-force-scan");
+    if (forceScanBtn) {
+      forceScanBtn.addEventListener("click", () => {
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+          if (tabs[0]?.id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "RESCAN" }, () => {});
+          }
+        });
+        setTimeout(renderData, 400);
       });
     }
 
-    const showFeedBtn = document.getElementById("btn-show-feed");
-    if (showFeedBtn) {
-      showFeedBtn.addEventListener("click", () => {
-        currentTab = "all";
-        const tabAll = document.getElementById("tab-all");
-        const tabOwn = document.getElementById("tab-own");
-        if (tabAll && tabOwn) {
-          tabAll.classList.add("active");
-          tabOwn.classList.remove("active");
+    const changeHandleBtn = document.getElementById("btn-change-handle");
+    if (changeHandleBtn) {
+      changeHandleBtn.addEventListener("click", () => {
+        const modal = document.getElementById("account-modal");
+        const inputEl = document.getElementById("modal-handle-input");
+        if (modal && inputEl) {
+          inputEl.value = myHandle;
+          modal.classList.add("open");
+          inputEl.focus();
         }
-        renderData();
       });
     }
 
@@ -315,13 +350,13 @@ async function renderData() {
     });
   }
 
-  // Hero Card Summary
-  document.getElementById("delta-heat").textContent = totalDeltaViews > 0 || totalDeltaLikes > 0
+  // Hero Card Summary: Exclusively show own view increment
+  document.getElementById("delta-heat").textContent = totalDeltaViews > 0
     ? `+${totalDeltaViews}`
     : `0`;
   
   const rateEl = document.getElementById("delta-rate");
-  if (totalDeltaLikes > 0 || totalDeltaViews >= 40) {
+  if (totalDeltaViews >= 50) {
     rateEl.textContent = "🔥 快速增长";
     rateEl.style.background = "rgba(244, 63, 94, 0.2)";
     rateEl.style.color = "#fb7185";
@@ -360,7 +395,7 @@ function renderPostsList(tweets, intervalM = 3) {
   const container = document.getElementById("posts-container");
   container.innerHTML = "";
 
-  tweets.slice(0, 8).forEach((t) => {
+  tweets.slice(0, 10).forEach((t) => {
     const card = document.createElement("div");
     card.className = "post-card";
     const c = t.current || {};
@@ -370,7 +405,7 @@ function renderPostsList(tweets, intervalM = 3) {
     card.innerHTML = `
       <div class="post-text">${escapeHtml(t.text)}</div>
       <div class="post-stats">
-        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)}</span>
+        <span>👁️ ${formatNumber(c.views)} · ❤️ ${formatNumber(c.likes)} · 💬 ${formatNumber(c.replies)}</span>
         <span class="post-delta" style="color: #34d399;">${intervalM}m 阅: <b>+${dp.views || 0}</b> | 累计 阅: <b style="color:#38bdf8;">+${dt.views || 0}</b></span>
       </div>
     `;
