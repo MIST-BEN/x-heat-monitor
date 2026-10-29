@@ -135,14 +135,14 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
   color: #111827 !important;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 18px 22px;
-  width: 520px;
-  max-width: calc(100vw - 32px);
+  padding: 16px 20px;
+  width: 480px;
+  max-width: calc(100vw - 24px);
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 13px;
   line-height: 1.45;
-  box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.2), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
   z-index: 999999 !important;
   pointer-events: auto;
   font-feature-settings: "tnum" on;
@@ -261,6 +261,14 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
   font-size: 11px;
   color: #6b7280;
   font-weight: 500;
+}
+
+.x-meter-subtext {
+  font-size: 9.5px;
+  color: #9ca3af;
+  font-weight: 500;
+  margin-top: 1.5px;
+  white-space: nowrap;
 }
 
 .x-meter-divider {

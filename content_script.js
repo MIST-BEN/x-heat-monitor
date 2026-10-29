@@ -659,7 +659,8 @@
       bookmarks: Math.max(0, currMetrics.bookmarks - (basePeriodSnapshot.bookmarks || 0))
     };
 
-    // --- 3. Hourly Velocity (浏览量除以发布时间: 每小时增量 / 时速) ---
+    // --- 3. Hourly Velocity (全周期总时速 vs 监控期间增量时速 vs 近期实时推流时速) ---
+    // A. 全周期发帖时均增速 (浏览总量 ÷ 发帖总时长)
     const publishAgeMs = Math.max(now - publishedAt, 60 * 1000); // 至少 1 分钟防止除以 0
     const publishAgeHours = publishAgeMs / (1000 * 60 * 60);
     const hourlyVelocity = publishAgeHours > 0 ? Math.round(currMetrics.views / publishAgeHours) : 0;
@@ -668,34 +669,44 @@
     const hourlyRepliesRate = publishAgeHours > 0 ? (currMetrics.replies / publishAgeHours).toFixed(1) : "0.0";
     const hourlyBookmarksRate = publishAgeHours > 0 ? (currMetrics.bookmarks / publishAgeHours).toFixed(1) : "0.0";
 
+    // B. 监控期间时均增量速度 (实际观察到的累计增量 ÷ 持续监控时长)
+    const trackingAgeMs = Math.max(now - firstSeenAt, 60 * 1000);
+    const trackingAgeHours = trackingAgeMs / (1000 * 60 * 60);
+    const trackingDeltaVelocity = trackingAgeHours > 0 ? Math.round(dTot.views / trackingAgeHours) : 0;
+
+    // C. 近期瞬时推流时速 (近 N 分钟增量折算为时速)
+    const periodMinutes = Math.max(1, Math.round(agePeriodMs / 60000));
+    const recentBurstRate = periodMinutes > 0 ? Math.round(dPeriod.views * (60 / periodMinutes)) : 0;
+
     let publishAgeStr = "";
     if (publishAgeHours < 1) {
-      publishAgeStr = `${Math.max(1, Math.round(publishAgeMs / 60000))} 分钟`;
+      publishAgeStr = `${Math.max(1, Math.round(publishAgeMs / 60000))}分钟`;
     } else if (publishAgeHours < 24) {
-      publishAgeStr = `${publishAgeHours.toFixed(1)} 小时`;
+      publishAgeStr = `${publishAgeHours.toFixed(1)}小时`;
     } else {
       const days = (publishAgeHours / 24).toFixed(1);
-      publishAgeStr = `${days} 天`;
+      publishAgeStr = `${days}天`;
     }
 
     const formattedHourlyRate = hourlyVelocity >= 10000
       ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
       : `${hourlyVelocity}/h`;
 
-    // --- 4. Algorithm Push Momentum (推流态势判断) ---
+    // --- 4. Algorithm Push Momentum (推流态势精准判断) ---
     const vPeriod = dPeriod.views || 0;
     const vTot = dTot.views || 0;
     const vCurr = currMetrics.views || 0;
 
     let pillClass = "steady";
     let icon = "☕";
-    let pushStatus = "☕ 平稳推流";
+    let pushStatus = "☕ 平稳分发";
 
-    if (vPeriod >= 50 || hourlyVelocity >= 500) {
+    // 推流态势综合瞬时爆发时速与监控增量时速判断
+    if (recentBurstRate >= 400 || trackingDeltaVelocity >= 400 || hourlyVelocity >= 500) {
       pillClass = "hot";
       icon = "🔥";
       pushStatus = "🔥 爆款推流中";
-    } else if (vPeriod >= 5 || hourlyVelocity >= 80 || vTot > 0) {
+    } else if (recentBurstRate >= 50 || trackingDeltaVelocity >= 40 || hourlyVelocity >= 60 || vTot > 0) {
       pillClass = "growing";
       icon = "⚡";
       pushStatus = "⚡ 正在加速推流";
@@ -733,6 +744,8 @@
       publishDateStr: new Date(publishedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       hourlyVelocity,
       formattedHourlyRate,
+      trackingDeltaVelocity,
+      recentBurstRate,
       hourlyLikesRate,
       hourlyRtsRate,
       hourlyRepliesRate,
@@ -791,14 +804,30 @@
           parent = parent.parentElement;
         }
 
-        const rect = container.getBoundingClientRect();
         const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
         if (tooltipEl) {
+          // Reset transform before measuring
+          tooltipEl.style.transform = '';
+
+          const rect = container.getBoundingClientRect();
           const spaceBelow = window.innerHeight - rect.bottom;
           if (spaceBelow < 440 && rect.top > 440) {
             tooltipEl.classList.add('flipped');
           } else {
             tooltipEl.classList.remove('flipped');
+          }
+
+          // Measure against tweet article & viewport left to prevent left-side clipping
+          const tweetRect = tweetArticle.getBoundingClientRect();
+          const tooltipRect = tooltipEl.getBoundingClientRect();
+          const safeMinLeft = Math.max(12, tweetRect.left + 4);
+
+          if (tooltipRect.left < safeMinLeft) {
+            const shiftRight = Math.ceil(safeMinLeft - tooltipRect.left);
+            tooltipEl.style.transform = `translateX(${shiftRight}px)`;
+          } else if (tooltipRect.right > window.innerWidth - 12) {
+            const shiftLeft = Math.floor((window.innerWidth - 12) - tooltipRect.right);
+            tooltipEl.style.transform = `translateX(${shiftLeft}px)`;
           }
         }
       });
@@ -880,57 +909,55 @@
             ${ownTag}
           </div>
           <div class="header-right">
-            持续追踪 ${info.totalAgeStr}
+            发帖 ${info.publishAgeStr}前 · 持续监控 ${info.totalAgeStr}
           </div>
         </div>
 
         <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
         <div class="x-velocity-meter-card">
-          <!-- 1. Velocity Core Metric -->
+          <!-- 1. 全帖总时均 (总浏览 ÷ 发帖时长) -->
           <div class="x-meter-col">
-            <div class="x-meter-icon-pill" title="基于浏览量与发帖时长计算的时均增速">
+            <div class="x-meter-icon-pill" title="全帖总均速 = 总浏览量 ÷ 发帖时长">
               <svg class="x-speedometer-icon" viewBox="0 0 24 24">
                 <path d="M12 14v-4"></path>
                 <path d="M3.34 17a10 10 0 1 1 17.32 0"></path>
               </svg>
             </div>
             <div>
-              <div class="x-meter-label">时均增速</div>
+              <div class="x-meter-label">全帖总均速</div>
               <div class="x-meter-number-row">
                 <span class="x-meter-value">${info.hourlyVelocity}</span>
                 <span class="x-meter-unit">阅/h</span>
               </div>
+              <div class="x-meter-subtext">${c.views} ÷ ${info.publishAgeStr}</div>
             </div>
           </div>
 
           <div class="x-meter-divider"></div>
 
-          <!-- 2. Algorithm Push Momentum -->
+          <!-- 2. 监控期间增量时速 (实际增量 ÷ 监控时长) -->
           <div class="x-meter-col">
             <div>
-              <div class="x-meter-label" style="margin-bottom: 2px;">算法推流态势</div>
+              <div class="x-meter-label">监控增量时速</div>
+              <div class="x-meter-number-row">
+                <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
+                <span class="x-meter-unit">阅/h</span>
+              </div>
+              <div class="x-meter-subtext">+${dt.views} ÷ ${info.totalAgeStr}</div>
+            </div>
+          </div>
+
+          <div class="x-meter-divider"></div>
+
+          <!-- 3. 算法推流态势 & 近期实时推流 -->
+          <div class="x-meter-col">
+            <div>
+              <div class="x-meter-label">当前推流态势</div>
               <div class="x-push-status-badge ${gaugeClass}">
                 <span class="x-status-pulse-dot"></span>
                 <span>${info.pushStatus}</span>
               </div>
-            </div>
-          </div>
-
-          <div class="x-meter-divider"></div>
-
-          <!-- 3. Speed Rating Gauge Scale -->
-          <div class="x-meter-col">
-            <div>
-              <div class="x-meter-label" style="margin-bottom: 2px;">推流强度</div>
-              <div class="x-speed-gauge-wrap">
-                <div class="x-gauge-bars" title="推流等级: ${gaugeLevel} 级">
-                  <span class="x-gauge-bar ${bar1}"></span>
-                  <span class="x-gauge-bar ${bar2}"></span>
-                  <span class="x-gauge-bar ${bar3}"></span>
-                  <span class="x-gauge-bar ${bar4}"></span>
-                </div>
-                <span class="x-gauge-text">${gaugeText}</span>
-              </div>
+              <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
             </div>
           </div>
         </div>
