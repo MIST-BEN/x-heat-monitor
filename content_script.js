@@ -295,6 +295,20 @@
     return null;
   }
 
+  // Derive mathematically exact publication timestamp directly from Twitter's Snowflake ID
+  function getTweetTimestampFromId(tweetId) {
+    try {
+      if (!tweetId) return null;
+      const idBig = BigInt(tweetId);
+      const twitterEpoch = 1288834974657n; // Twitter Epoch: 2010-11-04T01:42:54.657Z
+      const timestamp = Number((idBig >> 22n) + twitterEpoch);
+      if (timestamp > 1288834974657 && timestamp <= Date.now() + 60000) {
+        return timestamp;
+      }
+    } catch (e) {}
+    return null;
+  }
+
   // Extract tweet ID, author, and publication timestamp reliably
   function extractTweetIdentity(tweetArticle) {
     let tweetId = null;
@@ -327,47 +341,56 @@
         if (match) {
           if (!author) author = match[1];
           tweetId = match[2];
-          return { tweetId, author, publishedAt };
         }
       }
     }
 
     // 2. Author-specific status link
-    if (author) {
+    if (!tweetId && author) {
       const authorStatusLink = tweetArticle.querySelector(`a[href*="/${author}/status/"]`);
       if (authorStatusLink) {
         const href = authorStatusLink.getAttribute('href') || '';
         const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
         if (match) {
           tweetId = match[2];
-          return { tweetId, author, publishedAt };
         }
       }
     }
 
     // 3. Check permalink URL if viewing single tweet status page
-    const pathMatch = window.location.pathname.match(/\/([^\/]+)\/status\/(\d+)/);
-    if (pathMatch) {
-      const isFocal = tweetArticle.querySelector('div[data-testid="tweetText"]') || tweetArticle.querySelector('h2');
-      if (isFocal) {
-        if (!author) author = pathMatch[1];
-        tweetId = pathMatch[2];
-        return { tweetId, author, publishedAt };
+    if (!tweetId) {
+      const pathMatch = window.location.pathname.match(/\/([^\/]+)\/status\/(\d+)/);
+      if (pathMatch) {
+        const isFocal = tweetArticle.querySelector('div[data-testid="tweetText"]') || tweetArticle.querySelector('h2');
+        if (isFocal) {
+          if (!author) author = pathMatch[1];
+          tweetId = pathMatch[2];
+        }
       }
     }
 
     // 4. Fallback: query status links outside of quoted tweet blocks
-    const statusLinks = tweetArticle.querySelectorAll('a[href*="/status/"]');
-    for (const link of statusLinks) {
-      if (link.closest('div[role="link"]') && link.closest('div[role="link"]') !== tweetArticle) {
-        continue; // Skip quoted tweet cards
+    if (!tweetId) {
+      const statusLinks = tweetArticle.querySelectorAll('a[href*="/status/"]');
+      for (const link of statusLinks) {
+        if (link.closest('div[role="link"]') && link.closest('div[role="link"]') !== tweetArticle) {
+          continue; // Skip quoted tweet cards
+        }
+        const href = link.getAttribute('href') || '';
+        const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
+        if (match) {
+          if (!author) author = match[1];
+          tweetId = match[2];
+          break;
+        }
       }
-      const href = link.getAttribute('href') || '';
-      const match = href.match(/\/([^\/]+)\/status\/(\d+)/);
-      if (match) {
-        if (!author) author = match[1];
-        tweetId = match[2];
-        break;
+    }
+
+    // 5. Canonical Snowflake Ground-Truth: Extract true publication timestamp from Snowflake ID
+    if (tweetId) {
+      const snowflakeTime = getTweetTimestampFromId(tweetId);
+      if (snowflakeTime) {
+        publishedAt = snowflakeTime;
       }
     }
 
@@ -502,12 +525,14 @@
         }
 
         // 1. Initial Baseline: First time user views this tweet
+        const canonicalPubTime = publishedAt || getTweetTimestampFromId(tweetId) || now;
+
         if (!tweetRecords[tweetId]) {
           tweetRecords[tweetId] = {
             id: tweetId,
             author,
             text,
-            publishedAt: publishedAt || now,
+            publishedAt: canonicalPubTime,
             isOwnTweet: isOwn,
             firstSeenAt: now,
             firstSeenMetrics: { ...metrics },
@@ -518,8 +543,9 @@
           hasNewRecords = true;
         } else {
           const rec = tweetRecords[tweetId];
-          if (publishedAt && (!rec.publishedAt || Math.abs(rec.publishedAt - publishedAt) > 60000)) {
-            rec.publishedAt = publishedAt;
+          // Canonical repair: ensure tweet publishedAt reflects true tweet creation timestamp from Snowflake
+          if (canonicalPubTime && (!rec.publishedAt || Math.abs(rec.publishedAt - canonicalPubTime) > 10000)) {
+            rec.publishedAt = canonicalPubTime;
             hasNewRecords = true;
           }
 
