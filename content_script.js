@@ -798,6 +798,311 @@
     };
   }
 
+  // Global Portal for rendering rich tooltips directly on document.body
+  // This eliminates any Stacking Context issues, parent overflow clipping, or virtual list collisions on short tweets.
+  let activePortalTweetId = null;
+  let activePortalContainer = null;
+  let activePortalMetrics = null;
+  let portalHideTimer = null;
+
+  function getOrCreatePortal() {
+    let portal = document.getElementById('x-heat-pulse-portal');
+    if (!portal) {
+      portal = document.createElement('div');
+      portal.id = 'x-heat-pulse-portal';
+      portal.className = 'x-heat-pulse-portal';
+      document.body.appendChild(portal);
+
+      // Keep portal visible when mouse enters portal body (e.g. for scrolling or clicking reset button)
+      portal.addEventListener('mouseenter', () => {
+        if (portalHideTimer) {
+          clearTimeout(portalHideTimer);
+          portalHideTimer = null;
+        }
+      });
+
+      portal.addEventListener('mouseleave', () => {
+        scheduleHidePortal(180);
+      });
+
+      // Prevent clicks inside portal from propagating to background tweet / links
+      portal.addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+    }
+    return portal;
+  }
+
+  function scheduleHidePortal(delay = 180) {
+    if (portalHideTimer) clearTimeout(portalHideTimer);
+    portalHideTimer = setTimeout(() => {
+      const portal = document.getElementById('x-heat-pulse-portal');
+      if (portal) {
+        portal.style.display = 'none';
+        portal.classList.remove('visible', 'flipped');
+        activePortalTweetId = null;
+        activePortalContainer = null;
+        activePortalMetrics = null;
+      }
+    }, delay);
+  }
+
+  function hidePortalImmediate() {
+    if (portalHideTimer) {
+      clearTimeout(portalHideTimer);
+      portalHideTimer = null;
+    }
+    const portal = document.getElementById('x-heat-pulse-portal');
+    if (portal) {
+      portal.style.display = 'none';
+      portal.classList.remove('visible', 'flipped');
+      activePortalTweetId = null;
+      activePortalContainer = null;
+      activePortalMetrics = null;
+    }
+  }
+
+  function positionPortal(container) {
+    const portal = getOrCreatePortal();
+    const rect = container.getBoundingClientRect();
+    const pWidth = 480;
+
+    // Horizontal: align right edge with badge right edge, clamped inside viewport
+    let left = rect.right - pWidth;
+    if (left < 12) left = 12;
+    if (left + pWidth > window.innerWidth - 12) {
+      left = Math.max(12, window.innerWidth - 12 - pWidth);
+    }
+    portal.style.left = `${left}px`;
+    portal.style.right = 'auto';
+
+    // Vertical: Smart Viewport Clamping & Flip Detection
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    if (spaceBelow < 340 && spaceAbove > spaceBelow) {
+      // Flip above badge
+      portal.classList.add('flipped');
+      const maxH = Math.min(480, Math.max(180, spaceAbove - 24));
+      portal.style.maxHeight = `${maxH}px`;
+      portal.style.top = 'auto';
+      portal.style.bottom = `${window.innerHeight - rect.top + 8}px`;
+    } else {
+      // Place below badge
+      portal.classList.remove('flipped');
+      const maxH = Math.min(480, Math.max(180, spaceBelow - 24));
+      portal.style.maxHeight = `${maxH}px`;
+      portal.style.top = `${rect.bottom + 8}px`;
+      portal.style.bottom = 'auto';
+    }
+  }
+
+  function renderPortalContent(portal, tweetId, info, record) {
+    const dp = info.dPeriod;
+    const dt = info.dTot;
+    const c = info.curr;
+    activePortalMetrics = c;
+
+    const renderDelta = (val) => {
+      if (val > 0) return `<span class="val-highlight">+${val}</span>`;
+      return `<span class="val-zero">+0</span>`;
+    };
+
+    const ownTag = info.isOwnTweet ? `<span class="header-badge">我的专属帖子</span>` : '';
+
+    let gaugeClass = 'steady';
+    if (info.hourlyVelocity >= 500) {
+      gaugeClass = 'hot';
+    } else if (info.hourlyVelocity >= 30) {
+      gaugeClass = 'growing';
+    }
+
+    portal.innerHTML = `
+      <div class="x-heat-pulse-tooltip-header">
+        <div class="header-left">
+          <span class="header-title">X 帖子热度时序追踪</span>
+          ${ownTag}
+        </div>
+        <div class="header-right">
+          发帖 ${info.publishAgeStr}前 · 持续监控 ${info.totalAgeStr}
+        </div>
+      </div>
+
+      <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
+      <div class="x-velocity-meter-card">
+        <!-- 1. 全帖总时均 (总浏览 ÷ 发帖时长) -->
+        <div class="x-meter-col">
+          <div class="x-meter-icon-pill" title="全帖总均速 = 总浏览量 ÷ 发帖时长">
+            <svg class="x-speedometer-icon" viewBox="0 0 24 24">
+              <path d="M12 14v-4"></path>
+              <path d="M3.34 17a10 10 0 1 1 17.32 0"></path>
+            </svg>
+          </div>
+          <div>
+            <div class="x-meter-label">全帖总均速</div>
+            <div class="x-meter-number-row">
+              <span class="x-meter-value">${info.hourlyVelocity}</span>
+              <span class="x-meter-unit">阅/h</span>
+            </div>
+            <div class="x-meter-subtext">${c.views} ÷ ${info.publishAgeStr}</div>
+          </div>
+        </div>
+
+        <div class="x-meter-divider"></div>
+
+        <!-- 2. 监控期间增量时速 (实际增量 ÷ 监控时长) -->
+        <div class="x-meter-col">
+          <div>
+            <div class="x-meter-label">监控增量时速</div>
+            <div class="x-meter-number-row">
+              <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
+              <span class="x-meter-unit">阅/h</span>
+            </div>
+            <div class="x-meter-subtext">+${dt.views} ÷ ${info.totalAgeStr}</div>
+          </div>
+        </div>
+
+        <div class="x-meter-divider"></div>
+
+        <!-- 3. 算法推流态势 & 近期实时推流 -->
+        <div class="x-meter-col">
+          <div>
+            <div class="x-meter-label">当前推流态势</div>
+            <div class="x-push-status-badge ${gaugeClass}">
+              <span class="x-status-pulse-dot"></span>
+              <span>${info.pushStatus}</span>
+            </div>
+            <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
+          </div>
+        </div>
+      </div>
+
+      <table class="x-heat-pulse-tooltip-table">
+        <thead>
+          <tr>
+            <th class="col-left">互动指标</th>
+            <th class="col-right">近${info.intervalPeriodStr || 3}分钟增量</th>
+            <th class="col-right">监控累计增量</th>
+            <th class="col-right">当前总量</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="metric-name-wrap">
+                <svg class="metric-icon" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                <span>曝光浏览</span>
+              </div>
+            </td>
+            <td class="col-right">${renderDelta(dp.views)}</td>
+            <td class="col-right">${renderDelta(dt.views)}</td>
+            <td class="col-right val-total">${c.views}</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="metric-name-wrap">
+                <svg class="metric-icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
+                <span>获得点赞</span>
+              </div>
+            </td>
+            <td class="col-right">${renderDelta(dp.likes)}</td>
+            <td class="col-right">${renderDelta(dt.likes)}</td>
+            <td class="col-right val-total">${c.likes}</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="metric-name-wrap">
+                <svg class="metric-icon" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="m7 23-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+                <span>转发推文</span>
+              </div>
+            </td>
+            <td class="col-right">${renderDelta(dp.retweets)}</td>
+            <td class="col-right">${renderDelta(dt.retweets)}</td>
+            <td class="col-right val-total">${c.retweets}</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="metric-name-wrap">
+                <svg class="metric-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                <span>参与回复</span>
+              </div>
+            </td>
+            <td class="col-right">${renderDelta(dp.replies)}</td>
+            <td class="col-right">${renderDelta(dt.replies)}</td>
+            <td class="col-right val-total">${c.replies}</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="metric-name-wrap">
+                <svg class="metric-icon" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
+                <span>书签收藏</span>
+              </div>
+            </td>
+            <td class="col-right">${renderDelta(dp.bookmarks)}</td>
+            <td class="col-right">${renderDelta(dt.bookmarks)}</td>
+            <td class="col-right val-total">${c.bookmarks}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="x-heat-pulse-tooltip-footer">
+        <span class="footer-benchmark">首次捕获基准：${info.firstMetrics.views || 0} 阅（${info.firstSeenDateStr}）</span>
+        <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">↻ 重设此帖基准</button>
+      </div>
+    `;
+
+    const resetBtn = portal.querySelector(`.x-heat-pulse-reset-btn[data-reset-id="${tweetId}"]`);
+    if (resetBtn) {
+      resetBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        resetBtn.textContent = '✓ 已设为新基准';
+        resetBtn.style.color = '#00ba7c';
+        resetBtn.style.borderColor = '#00ba7c';
+        await resetTweetBaseline(tweetId, c);
+        setTimeout(scheduleScan, 300);
+      });
+    }
+  }
+
+  function showPortalForTweet(container, tweetId, info, record) {
+    activePortalTweetId = tweetId;
+    activePortalContainer = container;
+
+    const portal = getOrCreatePortal();
+    renderPortalContent(portal, tweetId, info, record);
+    portal.style.display = 'block';
+    portal.classList.add('visible');
+    positionPortal(container);
+  }
+
+  // Window scroll & resize listeners for portal
+  window.addEventListener('scroll', () => {
+    if (!activePortalContainer) return;
+    if (!document.contains(activePortalContainer)) {
+      hidePortalImmediate();
+      return;
+    }
+    const rect = activePortalContainer.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      hidePortalImmediate();
+      return;
+    }
+    positionPortal(activePortalContainer);
+  }, { passive: true });
+
+  window.addEventListener('resize', () => {
+    if (activePortalContainer && document.contains(activePortalContainer)) {
+      positionPortal(activePortalContainer);
+    }
+  }, { passive: true });
+
+  document.addEventListener('click', (e) => {
+    const portal = document.getElementById('x-heat-pulse-portal');
+    if (!portal || portal.style.display === 'none') return;
+    if (!portal.contains(e.target) && !e.target.closest('.x-heat-pulse-badge-container')) {
+      hidePortalImmediate();
+    }
+  });
+
   // Inject or update in-page pill badge (placed in top-right header, adjacent to caret)
   function injectOrUpdateBadge(tweetArticle, tweetId, info, record) {
     const mount = findTweetMountPoint(tweetArticle);
@@ -805,8 +1110,7 @@
 
     let container = tweetArticle.querySelector(`.x-heat-pulse-badge-container[data-id="${tweetId}"]`);
 
-    // Migration / Relocation Guard:
-    // If container exists but is not in the desired mount parent (e.g. was previously in bottom action bar), remove and remount
+    // Migration / Relocation Guard
     if (container && container.parentElement !== mount.parent) {
       container.remove();
       container = null;
@@ -824,99 +1128,24 @@
           <span class="x-heat-pulse-divider"></span>
           <span class="x-heat-pulse-sub">${info.subText}</span>
         </div>
-        <div class="x-heat-pulse-tooltip">
-          <!-- Dynamic Tooltip Table -->
-        </div>
       `;
 
-      // Prevent tweet card click navigation when interacting with badge or reset button
+      // Prevent tweet card click navigation when interacting with badge
       container.addEventListener('click', (e) => {
         e.stopPropagation();
       });
 
-      // Elevate stacking context of all ancestor elements (including cellInnerDiv)
-      // so the card on short tweets floats cleanly above all subsequent tweets in the feed
-      let elevatedParents = [];
-
-      const elevateStackingContext = () => {
-        elevatedParents = [];
-        let curr = container.parentElement;
-        while (curr && curr !== document.body) {
-          elevatedParents.push({
-            el: curr,
-            prevZ: curr.style.zIndex,
-            prevPos: curr.style.position,
-            prevOverflow: curr.style.overflow
-          });
-          curr.style.setProperty('z-index', '999999', 'important');
-
-          const computedPos = window.getComputedStyle(curr).position;
-          if (computedPos === 'static') {
-            curr.style.setProperty('position', 'relative', 'important');
-          }
-
-          const computedStyle = window.getComputedStyle(curr);
-          if (computedStyle.overflow === 'hidden' || computedStyle.overflowY === 'hidden') {
-            curr.style.setProperty('overflow', 'visible', 'important');
-          }
-
-          if (curr.getAttribute('data-testid') === 'cellInnerDiv' || curr.getAttribute('data-testid') === 'primaryColumn') {
-            break;
-          }
-          curr = curr.parentElement;
+      container.addEventListener('mouseenter', () => {
+        if (portalHideTimer) {
+          clearTimeout(portalHideTimer);
+          portalHideTimer = null;
         }
+        showPortalForTweet(container, tweetId, info, record);
+      });
 
-        const tooltipEl = container.querySelector('.x-heat-pulse-tooltip');
-        if (tooltipEl) {
-          // Reset transform before measuring
-          tooltipEl.style.transform = '';
-
-          const rect = container.getBoundingClientRect();
-          const spaceBelow = window.innerHeight - rect.bottom;
-          if (spaceBelow < 440 && rect.top > 440) {
-            tooltipEl.classList.add('flipped');
-          } else {
-            tooltipEl.classList.remove('flipped');
-          }
-
-          // Measure against tweet article & viewport left to prevent left-side clipping
-          const tweetRect = tweetArticle.getBoundingClientRect();
-          const tooltipRect = tooltipEl.getBoundingClientRect();
-          const safeMinLeft = Math.max(12, tweetRect.left + 4);
-
-          if (tooltipRect.left < safeMinLeft) {
-            const shiftRight = Math.ceil(safeMinLeft - tooltipRect.left);
-            tooltipEl.style.transform = `translateX(${shiftRight}px)`;
-          } else if (tooltipRect.right > window.innerWidth - 12) {
-            const shiftLeft = Math.floor((window.innerWidth - 12) - tooltipRect.right);
-            tooltipEl.style.transform = `translateX(${shiftLeft}px)`;
-          }
-        }
-      };
-
-      const restoreStackingContext = () => {
-        for (const item of elevatedParents) {
-          if (item.prevZ) {
-            item.el.style.zIndex = item.prevZ;
-          } else {
-            item.el.style.removeProperty('z-index');
-          }
-          if (item.prevPos) {
-            item.el.style.position = item.prevPos;
-          } else {
-            item.el.style.removeProperty('position');
-          }
-          if (item.prevOverflow) {
-            item.el.style.overflow = item.prevOverflow;
-          } else {
-            item.el.style.removeProperty('overflow');
-          }
-        }
-        elevatedParents = [];
-      };
-
-      container.addEventListener('mouseenter', elevateStackingContext);
-      container.addEventListener('mouseleave', restoreStackingContext);
+      container.addEventListener('mouseleave', () => {
+        scheduleHidePortal(180);
+      });
 
       if (mount.beforeElement && mount.beforeElement.parentElement === mount.parent) {
         mount.parent.insertBefore(container, mount.beforeElement);
@@ -925,7 +1154,7 @@
       }
     }
 
-    // Update pill
+    // Update pill text & styles
     const pill = container.querySelector('.x-heat-pulse-pill');
     const mainSpan = container.querySelector('.x-heat-pulse-main');
     const subSpan = container.querySelector('.x-heat-pulse-sub');
@@ -936,193 +1165,11 @@
       subSpan.textContent = info.subText;
     }
 
-    // Render Full Table Tooltip
-    const tooltip = container.querySelector('.x-heat-pulse-tooltip');
-    if (tooltip) {
-      const dp = info.dPeriod;
-      const dt = info.dTot;
-      const c = info.curr;
-
-      const renderDelta = (val) => {
-        if (val > 0) {
-          return `<span class="val-highlight">+${val}</span>`;
-        }
-        return `<span class="val-zero">+0</span>`;
-      };
-
-      const ownTag = info.isOwnTweet ? `<span class="header-badge">我的专属帖子</span>` : '';
-
-      // Calculate speed rating & 4-bar scale
-      let gaugeLevel = 1;
-      let gaugeText = '平稳推流';
-      let gaugeClass = 'steady';
-      if (info.hourlyVelocity >= 500) {
-        gaugeLevel = 4;
-        gaugeText = '爆款推流 (Lv.4)';
-        gaugeClass = 'hot';
-      } else if (info.hourlyVelocity >= 100) {
-        gaugeLevel = 3;
-        gaugeText = '加速推流 (Lv.3)';
-        gaugeClass = 'growing';
-      } else if (info.hourlyVelocity >= 30) {
-        gaugeLevel = 2;
-        gaugeText = '活跃释放 (Lv.2)';
-        gaugeClass = 'growing';
-      } else {
-        gaugeLevel = 1;
-        gaugeText = '平稳推流 (Lv.1)';
-        gaugeClass = 'steady';
-      }
-
-      const bar1 = gaugeLevel >= 1 ? `active ${gaugeClass}` : '';
-      const bar2 = gaugeLevel >= 2 ? `active ${gaugeClass}` : '';
-      const bar3 = gaugeLevel >= 3 ? `active ${gaugeClass}` : '';
-      const bar4 = gaugeLevel >= 4 ? `active ${gaugeClass}` : '';
-
-      tooltip.innerHTML = `
-        <div class="x-heat-pulse-tooltip-header">
-          <div class="header-left">
-            <span class="header-title">X 帖子热度时序追踪</span>
-            ${ownTag}
-          </div>
-          <div class="header-right">
-            发帖 ${info.publishAgeStr}前 · 持续监控 ${info.totalAgeStr}
-          </div>
-        </div>
-
-        <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
-        <div class="x-velocity-meter-card">
-          <!-- 1. 全帖总时均 (总浏览 ÷ 发帖时长) -->
-          <div class="x-meter-col">
-            <div class="x-meter-icon-pill" title="全帖总均速 = 总浏览量 ÷ 发帖时长">
-              <svg class="x-speedometer-icon" viewBox="0 0 24 24">
-                <path d="M12 14v-4"></path>
-                <path d="M3.34 17a10 10 0 1 1 17.32 0"></path>
-              </svg>
-            </div>
-            <div>
-              <div class="x-meter-label">全帖总均速</div>
-              <div class="x-meter-number-row">
-                <span class="x-meter-value">${info.hourlyVelocity}</span>
-                <span class="x-meter-unit">阅/h</span>
-              </div>
-              <div class="x-meter-subtext">${c.views} ÷ ${info.publishAgeStr}</div>
-            </div>
-          </div>
-
-          <div class="x-meter-divider"></div>
-
-          <!-- 2. 监控期间增量时速 (实际增量 ÷ 监控时长) -->
-          <div class="x-meter-col">
-            <div>
-              <div class="x-meter-label">监控增量时速</div>
-              <div class="x-meter-number-row">
-                <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
-                <span class="x-meter-unit">阅/h</span>
-              </div>
-              <div class="x-meter-subtext">+${dt.views} ÷ ${info.totalAgeStr}</div>
-            </div>
-          </div>
-
-          <div class="x-meter-divider"></div>
-
-          <!-- 3. 算法推流态势 & 近期实时推流 -->
-          <div class="x-meter-col">
-            <div>
-              <div class="x-meter-label">当前推流态势</div>
-              <div class="x-push-status-badge ${gaugeClass}">
-                <span class="x-status-pulse-dot"></span>
-                <span>${info.pushStatus}</span>
-              </div>
-              <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
-            </div>
-          </div>
-        </div>
-
-        <table class="x-heat-pulse-tooltip-table">
-          <thead>
-            <tr>
-              <th class="col-left">互动指标</th>
-              <th class="col-right">近${info.intervalPeriodStr || 3}分钟增量</th>
-              <th class="col-right">监控累计增量</th>
-              <th class="col-right">当前总量</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>
-                <div class="metric-name-wrap">
-                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                  <span>曝光浏览</span>
-                </div>
-              </td>
-              <td class="col-right">${renderDelta(dp.views)}</td>
-              <td class="col-right">${renderDelta(dt.views)}</td>
-              <td class="col-right val-total">${c.views}</td>
-            </tr>
-            <tr>
-              <td>
-                <div class="metric-name-wrap">
-                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"></path></svg>
-                  <span>获得点赞</span>
-                </div>
-              </td>
-              <td class="col-right">${renderDelta(dp.likes)}</td>
-              <td class="col-right">${renderDelta(dt.likes)}</td>
-              <td class="col-right val-total">${c.likes}</td>
-            </tr>
-            <tr>
-              <td>
-                <div class="metric-name-wrap">
-                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="m17 1 4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="m7 23-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-                  <span>转发推文</span>
-                </div>
-              </td>
-              <td class="col-right">${renderDelta(dp.retweets)}</td>
-              <td class="col-right">${renderDelta(dt.retweets)}</td>
-              <td class="col-right val-total">${c.retweets}</td>
-            </tr>
-            <tr>
-              <td>
-                <div class="metric-name-wrap">
-                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                  <span>参与回复</span>
-                </div>
-              </td>
-              <td class="col-right">${renderDelta(dp.replies)}</td>
-              <td class="col-right">${renderDelta(dt.replies)}</td>
-              <td class="col-right val-total">${c.replies}</td>
-            </tr>
-            <tr>
-              <td>
-                <div class="metric-name-wrap">
-                  <svg class="metric-icon" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path></svg>
-                  <span>书签收藏</span>
-                </div>
-              </td>
-              <td class="col-right">${renderDelta(dp.bookmarks)}</td>
-              <td class="col-right">${renderDelta(dt.bookmarks)}</td>
-              <td class="col-right val-total">${c.bookmarks}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="x-heat-pulse-tooltip-footer">
-          <span class="footer-benchmark">首次捕获基准：${info.firstMetrics.views || 0} 阅（${info.firstSeenDateStr}）</span>
-          <button class="x-heat-pulse-reset-btn" data-reset-id="${tweetId}" title="将当前数值重设为新的监控起点">↻ 重设此帖基准</button>
-        </div>
-      `;
-
-      // Bind Reset Baseline button with instant UI feedback
-      const resetBtn = tooltip.querySelector(`.x-heat-pulse-reset-btn[data-reset-id="${tweetId}"]`);
-      if (resetBtn) {
-        resetBtn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          resetBtn.textContent = '✓ 已设为新基准';
-          resetBtn.style.color = '#00ba7c';
-          resetBtn.style.borderColor = '#00ba7c';
-          await resetTweetBaseline(tweetId, c);
-          setTimeout(scheduleScan, 300);
-        });
+    // If portal is currently showing for this tweet, update live values in real time
+    if (activePortalTweetId === tweetId) {
+      const portal = document.getElementById('x-heat-pulse-portal');
+      if (portal && portal.style.display !== 'none') {
+        renderPortalContent(portal, tweetId, info, record);
       }
     }
   }

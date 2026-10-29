@@ -128,33 +128,79 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
   font-weight: 500;
 }
 
-/* 2. Tooltip Card - Linear / Stripe Minimalist Professional SaaS Design */
+/* 2. Global Portal & Tooltip Card - Linear / Stripe Minimalist Professional SaaS Design */
+#x-heat-pulse-portal,
+.x-heat-pulse-portal,
 .x-heat-pulse-tooltip {
   display: none;
-  position: absolute;
-  top: calc(100% + 8px);
-  bottom: auto;
-  right: 0;
+  position: fixed !important;
   background: #ffffff !important;
   color: #111827 !important;
   border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 16px 20px;
+  padding: 14px 18px;
   width: 480px;
   max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   font-size: 13px;
   line-height: 1.45;
   box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.12);
-  z-index: 999999 !important;
+  z-index: 2147483647 !important;
   pointer-events: auto;
   font-feature-settings: "tnum" on;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
 }
 
-.x-heat-pulse-badge-container:hover .x-heat-pulse-tooltip {
-  display: block;
-  animation: xTooltipIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+#x-heat-pulse-portal.visible,
+.x-heat-pulse-portal.visible {
+  display: block !important;
+  animation: xPortalFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes xPortalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#x-heat-pulse-portal::-webkit-scrollbar,
+.x-heat-pulse-portal::-webkit-scrollbar {
+  width: 5px;
+}
+#x-heat-pulse-portal::-webkit-scrollbar-track,
+.x-heat-pulse-portal::-webkit-scrollbar-track {
+  background: transparent;
+}
+#x-heat-pulse-portal::-webkit-scrollbar-thumb,
+.x-heat-pulse-portal::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+#x-heat-pulse-portal::-webkit-scrollbar-thumb:hover,
+.x-heat-pulse-portal::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Invisible hover bridge to prevent flickering when cursor moves between badge and portal */
+#x-heat-pulse-portal::before,
+.x-heat-pulse-portal::before {
+  content: "";
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: transparent;
+}
+#x-heat-pulse-portal.flipped::before,
+.x-heat-pulse-portal.flipped::before {
+  top: auto;
+  bottom: -12px;
+  height: 12px;
 }
 
 .x-heat-pulse-tooltip-header {
@@ -498,12 +544,6 @@ div:has(> * > * > * > .x-heat-pulse-badge-container:hover) {
   border-color: #38bdf8;
   color: #38bdf8;
   transform: translateY(-0.5px);
-}
-
-/* Smart Flipped Tooltip */
-.x-heat-pulse-tooltip.flipped {
-  top: auto;
-  bottom: calc(100% + 8px);
 }
 
 /* Animations */
