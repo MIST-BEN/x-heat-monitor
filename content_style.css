@@ -171,6 +171,150 @@
   letter-spacing: -0.01em;
 }
 
+/* Hourly Velocity & Push Momentum Meter Strip (时速增数仪表) */
+.x-velocity-meter-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+.x-meter-col {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.x-meter-icon-pill {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #4b5563;
+  flex-shrink: 0;
+}
+
+.x-speedometer-icon {
+  width: 14px;
+  height: 14px;
+  stroke: #4b5563;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
+
+.x-meter-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6b7280;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.x-meter-number-row {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+}
+
+.x-meter-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.x-meter-unit {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.x-meter-divider {
+  width: 1px;
+  height: 20px;
+  background: #e5e7eb;
+}
+
+.x-push-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.x-push-status-badge.hot {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.x-push-status-badge.steady {
+  background: #f3f4f6;
+  border-color: #e5e7eb;
+  color: #4b5563;
+}
+
+.x-status-pulse-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.x-speed-gauge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.x-gauge-bars {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+}
+
+.x-gauge-bar {
+  width: 3.5px;
+  height: 11px;
+  border-radius: 1px;
+  background: #e5e7eb;
+}
+
+.x-gauge-bar.active {
+  background: #15803d;
+}
+
+.x-gauge-bar.hot {
+  background: #dc2626;
+}
+
+.x-gauge-text {
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: -0.01em;
+}
+
 .x-heat-pulse-tooltip-table {
   width: 100%;
   border-collapse: collapse;

@@ -747,6 +747,33 @@
 
       const ownTag = info.isOwnTweet ? `<span class="header-badge">我的专属帖子</span>` : '';
 
+      // Calculate speed rating & 4-bar scale
+      let gaugeLevel = 1;
+      let gaugeText = '平稳推流';
+      let gaugeClass = 'steady';
+      if (info.hourlyVelocity >= 500) {
+        gaugeLevel = 4;
+        gaugeText = '爆款推流 (Lv.4)';
+        gaugeClass = 'hot';
+      } else if (info.hourlyVelocity >= 100) {
+        gaugeLevel = 3;
+        gaugeText = '加速推流 (Lv.3)';
+        gaugeClass = 'growing';
+      } else if (info.hourlyVelocity >= 30) {
+        gaugeLevel = 2;
+        gaugeText = '活跃释放 (Lv.2)';
+        gaugeClass = 'growing';
+      } else {
+        gaugeLevel = 1;
+        gaugeText = '平稳推流 (Lv.1)';
+        gaugeClass = 'steady';
+      }
+
+      const bar1 = gaugeLevel >= 1 ? `active ${gaugeClass}` : '';
+      const bar2 = gaugeLevel >= 2 ? `active ${gaugeClass}` : '';
+      const bar3 = gaugeLevel >= 3 ? `active ${gaugeClass}` : '';
+      const bar4 = gaugeLevel >= 4 ? `active ${gaugeClass}` : '';
+
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
           <div class="header-left">
@@ -757,6 +784,58 @@
             持续追踪 ${info.totalAgeStr}
           </div>
         </div>
+
+        <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
+        <div class="x-velocity-meter-card">
+          <!-- 1. Velocity Core Metric -->
+          <div class="x-meter-col">
+            <div class="x-meter-icon-pill" title="基于浏览量与发帖时长计算的时均增速">
+              <svg class="x-speedometer-icon" viewBox="0 0 24 24">
+                <path d="M12 14v-4"></path>
+                <path d="M3.34 17a10 10 0 1 1 17.32 0"></path>
+              </svg>
+            </div>
+            <div>
+              <div class="x-meter-label">时均增速</div>
+              <div class="x-meter-number-row">
+                <span class="x-meter-value">${info.hourlyVelocity}</span>
+                <span class="x-meter-unit">阅/h</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="x-meter-divider"></div>
+
+          <!-- 2. Algorithm Push Momentum -->
+          <div class="x-meter-col">
+            <div>
+              <div class="x-meter-label" style="margin-bottom: 2px;">算法推流态势</div>
+              <div class="x-push-status-badge ${gaugeClass}">
+                <span class="x-status-pulse-dot"></span>
+                <span>${info.pushStatus}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="x-meter-divider"></div>
+
+          <!-- 3. Speed Rating Gauge Scale -->
+          <div class="x-meter-col">
+            <div>
+              <div class="x-meter-label" style="margin-bottom: 2px;">推流强度</div>
+              <div class="x-speed-gauge-wrap">
+                <div class="x-gauge-bars" title="推流等级: ${gaugeLevel} 级">
+                  <span class="x-gauge-bar ${bar1}"></span>
+                  <span class="x-gauge-bar ${bar2}"></span>
+                  <span class="x-gauge-bar ${bar3}"></span>
+                  <span class="x-gauge-bar ${bar4}"></span>
+                </div>
+                <span class="x-gauge-text">${gaugeText}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <table class="x-heat-pulse-tooltip-table">
           <thead>
             <tr>
