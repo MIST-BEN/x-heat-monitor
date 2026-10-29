@@ -687,9 +687,28 @@
 
     // --- 3. Hourly Velocity (全周期总时速 vs 监控期间增量时速 vs 近期实时推流时速) ---
     // A. 全周期发帖时均增速 (浏览总量 ÷ 发帖总时长)
-    const publishAgeMs = Math.max(now - publishedAt, 60 * 1000); // 至少 1 分钟防止除以 0
+    const publishAgeMs = Math.max(now - publishedAt, 10 * 1000); // 至少 10 秒
     const publishAgeHours = publishAgeMs / (1000 * 60 * 60);
-    const hourlyVelocity = publishAgeHours > 0 ? Math.round(currMetrics.views / publishAgeHours) : 0;
+
+    // 冷启动低样本保护：发帖前 3 分钟且浏览量不足 20 时，样本方差极大，不盲目推断夸大推流
+    const isEarlyColdStart = (publishAgeMs < 3 * 60 * 1000 && currMetrics.views < 20) || (currMetrics.views < 5);
+
+    let hourlyVelocity = 0;
+    let hourlyVelocityText = "";
+    let formattedHourlyRate = "";
+
+    if (isEarlyColdStart) {
+      hourlyVelocity = 0;
+      hourlyVelocityText = "测速中";
+      formattedHourlyRate = "测速中";
+    } else {
+      hourlyVelocity = publishAgeHours > 0 ? Math.round(currMetrics.views / publishAgeHours) : 0;
+      hourlyVelocityText = String(hourlyVelocity);
+      formattedHourlyRate = hourlyVelocity >= 10000
+        ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
+        : `${hourlyVelocity}/h`;
+    }
+
     const hourlyLikesRate = publishAgeHours > 0 ? (currMetrics.likes / publishAgeHours).toFixed(1) : "0.0";
     const hourlyRtsRate = publishAgeHours > 0 ? (currMetrics.retweets / publishAgeHours).toFixed(1) : "0.0";
     const hourlyRepliesRate = publishAgeHours > 0 ? (currMetrics.replies / publishAgeHours).toFixed(1) : "0.0";
@@ -714,10 +733,6 @@
       publishAgeStr = `${days}天`;
     }
 
-    const formattedHourlyRate = hourlyVelocity >= 10000
-      ? `${(hourlyVelocity / 1000).toFixed(1)}k/h`
-      : `${hourlyVelocity}/h`;
-
     // --- 4. Algorithm Push Momentum (推流态势精准判断) ---
     const vPeriod = dPeriod.views || 0;
     const vTot = dTot.views || 0;
@@ -727,15 +742,19 @@
     let icon = "☕";
     let pushStatus = "☕ 平稳分发";
 
-    // 推流态势综合瞬时爆发时速与监控增量时速判断
-    if (recentBurstRate >= 400 || trackingDeltaVelocity >= 400 || hourlyVelocity >= 500) {
+    // 推流态势严格基于真实增量与有效时速，刚发 1 分钟 2 阅杜绝假性“加速推流”
+    if (!isEarlyColdStart && (recentBurstRate >= 400 || trackingDeltaVelocity >= 400 || hourlyVelocity >= 500)) {
       pillClass = "hot";
       icon = "🔥";
       pushStatus = "🔥 爆款推流中";
-    } else if (recentBurstRate >= 50 || trackingDeltaVelocity >= 40 || hourlyVelocity >= 60 || vTot > 0) {
+    } else if (!isEarlyColdStart && (recentBurstRate >= 50 || trackingDeltaVelocity >= 40 || (vTot >= 10 && hourlyVelocity >= 60))) {
       pillClass = "growing";
       icon = "⚡";
       pushStatus = "⚡ 正在加速推流";
+    } else if (isNew || isEarlyColdStart) {
+      pillClass = "recording";
+      icon = "⏱️";
+      pushStatus = "⏱️ 刚发测速中";
     }
 
     const formatCompactNum = (num) => {
@@ -749,7 +768,7 @@
     let subText = "";
     const compactViews = formatCompactNum(vCurr);
 
-    if (isNew) {
+    if (isNew || isEarlyColdStart) {
       pillClass = "recording";
       icon = "⏱️";
       mainText = `${icon} ${compactViews} 阅 · ${formattedHourlyRate}`;
@@ -783,6 +802,7 @@
       publishAgeStr,
       publishDateStr: new Date(publishedAt).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       hourlyVelocity,
+      hourlyVelocityText,
       formattedHourlyRate,
       trackingDeltaVelocity,
       recentBurstRate,
@@ -937,50 +957,38 @@
 
       <!-- Hourly Velocity & Push Momentum Meter (时速增数仪表) -->
       <div class="x-velocity-meter-card">
-        <!-- 1. 全帖总时均 (总浏览 ÷ 发帖时长) -->
+        <!-- 1. 全帖总均速 (总浏览 ÷ 发帖时长) -->
         <div class="x-meter-col">
-          <div class="x-meter-icon-pill" title="全帖总均速 = 总浏览量 ÷ 发帖时长">
-            <svg class="x-speedometer-icon" viewBox="0 0 24 24">
-              <path d="M12 14v-4"></path>
-              <path d="M3.34 17a10 10 0 1 1 17.32 0"></path>
-            </svg>
+          <div class="x-meter-label">全帖总均速</div>
+          <div class="x-meter-number-row">
+            <span class="x-meter-value">${info.hourlyVelocityText}</span>
+            ${info.hourlyVelocityText !== "测速中" ? '<span class="x-meter-unit">阅/h</span>' : ''}
           </div>
-          <div>
-            <div class="x-meter-label">全帖总均速</div>
-            <div class="x-meter-number-row">
-              <span class="x-meter-value">${info.hourlyVelocity}</span>
-              <span class="x-meter-unit">阅/h</span>
-            </div>
-            <div class="x-meter-subtext">${c.views} ÷ ${info.publishAgeStr}</div>
-          </div>
+          <div class="x-meter-subtext">${c.views} 阅 ÷ ${info.publishAgeStr}</div>
         </div>
 
         <div class="x-meter-divider"></div>
 
         <!-- 2. 监控期间增量时速 (实际增量 ÷ 监控时长) -->
         <div class="x-meter-col">
-          <div>
-            <div class="x-meter-label">监控增量时速</div>
-            <div class="x-meter-number-row">
-              <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
-              <span class="x-meter-unit">阅/h</span>
-            </div>
-            <div class="x-meter-subtext">+${dt.views} ÷ ${info.totalAgeStr}</div>
+          <div class="x-meter-label">监控增量时速</div>
+          <div class="x-meter-number-row">
+            <span class="x-meter-value">${info.trackingDeltaVelocity}</span>
+            <span class="x-meter-unit">阅/h</span>
           </div>
+          <div class="x-meter-subtext">+${dt.views} 阅 ÷ ${info.totalAgeStr}</div>
         </div>
 
         <div class="x-meter-divider"></div>
 
         <!-- 3. 算法推流态势 & 近期实时推流 -->
         <div class="x-meter-col">
-          <div>
-            <div class="x-meter-label">当前推流态势</div>
-            <div class="x-push-status-badge ${gaugeClass}">
-              <span class="x-status-pulse-dot"></span>
-              <span>${info.pushStatus}</span>
-            </div>
-            <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
+          <div class="x-meter-label">当前推流态势</div>
+          <div class="x-push-status-badge ${info.pillClass}">
+            <span class="x-status-pulse-dot"></span>
+            <span>${info.pushStatus}</span>
           </div>
+          <div class="x-meter-subtext">近${info.intervalPeriodStr}分 +${dp.views} (瞬时 ~${info.recentBurstRate}/h)</div>
         </div>
       </div>
 
