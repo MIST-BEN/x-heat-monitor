@@ -7,11 +7,22 @@
  */
 
 let currentTab = "own"; // 'own' (default) or 'all'
+let currentSortMode = "views"; // 'views' (默认按总流量), 'surge' (近10分起量), 'velocity' (时均增速)
 
 document.addEventListener("DOMContentLoaded", async () => {
   // 1. Check active tab or auto-bind default handle (@sben96001)
   const storage = await chrome.storage.local.get(["my_user_handle", "config"]);
   let activeHandle = storage.my_user_handle || (storage.config ? storage.config.myHandle : "") || "sben96001";
+
+  // Sort selector listener
+  const sortSelect = document.getElementById("sort-select");
+  if (sortSelect) {
+    sortSelect.value = currentSortMode;
+    sortSelect.addEventListener("change", (e) => {
+      currentSortMode = e.target.value;
+      renderData();
+    });
+  }
 
   if (!storage.my_user_handle) {
     await bindHandleAndRetag(activeHandle);
@@ -524,8 +535,15 @@ async function renderData() {
     lastUpdateEl.textContent = `采样更新: ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
   }
 
-  // Sort: prioritize tweets with recent view changes or highest velocity
-  activeTweets.sort((a, b) => (b.dPeriod.views * 2 + b.hourlyVelocity) - (a.dPeriod.views * 2 + a.hourlyVelocity) || (b.dTot.views - a.dTot.views));
+  // Sort: Default strictly by total traffic (views) descending
+  if (currentSortMode === "surge") {
+    activeTweets.sort((a, b) => (b.dPeriod?.views || 0) - (a.dPeriod?.views || 0) || ((b.current?.views || 0) - (a.current?.views || 0)));
+  } else if (currentSortMode === "velocity") {
+    activeTweets.sort((a, b) => (b.hourlyVelocity || 0) - (a.hourlyVelocity || 0) || ((b.current?.views || 0) - (a.current?.views || 0)));
+  } else {
+    // 默认严格按总流量 (总浏览曝光 views) 降序排序
+    activeTweets.sort((a, b) => ((b.current?.views || 0) - (a.current?.views || 0)) || ((b.dTot?.views || 0) - (a.dTot?.views || 0)));
+  }
 
   // Render list
   const countEl = document.getElementById("monitored-count");
