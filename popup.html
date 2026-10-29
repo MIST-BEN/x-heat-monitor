@@ -190,6 +190,37 @@
     }
 
     /* Top Posts */
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .filter-tab {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+      padding: 6px 10px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .filter-tab:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #f8fafc;
+    }
+    .filter-tab.active {
+      background: rgba(56, 189, 248, 0.16);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+    }
     .section-title {
       font-size: 10.5px;
       color: #64748b;
@@ -337,9 +368,15 @@
     </div>
   </div>
 
+  <!-- Scope Filter Tabs -->
+  <div class="filter-tabs">
+    <button class="filter-tab active" id="tab-own">👤 我的专属帖子</button>
+    <button class="filter-tab" id="tab-all">🌐 发现信息流</button>
+  </div>
+
   <!-- Top Monitored Posts -->
   <div class="section-title">
-    <span>活跃帖子吞吐</span>
+    <span id="posts-list-title">我的活跃帖子</span>
     <span id="monitored-count">监控中: 0</span>
   </div>
   <div class="posts-list" id="posts-container">

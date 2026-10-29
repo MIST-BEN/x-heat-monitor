@@ -3,7 +3,13 @@
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
-  const { config } = await chrome.storage.local.get("config");
+  const storage = await chrome.storage.local.get(["config", "my_user_handle"]);
+  const config = storage.config;
+  const myHandle = storage.my_user_handle || (config ? config.myHandle : "");
+
+  if (myHandle) {
+    document.getElementById("myHandle").value = myHandle;
+  }
 
   if (config) {
     document.getElementById("intervalMinutes").value = config.intervalMinutes || 3;
@@ -36,8 +42,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         bookmarks: parseFloat(document.getElementById("w-bookmarks").value),
         views: parseFloat(document.getElementById("w-views").value)
       },
-      apiToken: document.getElementById("apiToken").value.trim()
+      apiToken: document.getElementById("apiToken").value.trim(),
+      myHandle: document.getElementById("myHandle").value.trim().replace(/^@/, '')
     };
+
+    if (updated.myHandle) {
+      chrome.storage.local.set({ my_user_handle: updated.myHandle });
+    }
 
     chrome.runtime.sendMessage({ action: "UPDATE_CONFIG", config: updated }, () => {
       const msg = document.getElementById("status-msg");

@@ -1,23 +1,56 @@
 /**
- * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.3.0)
- * 1. Default 3-minute high-sensitivity sampling interval (configurable).
- * 2. Directly inspects title, aria-label, and text for exact unrounded metric counts.
- * 3. Permanently retains initial baseline (First-Seen Metrics) to track lifetime delta.
+ * X Heat Pulse - In-Page Tweet Heat Differential & Lifetime Tracker (v1.4.0)
+ * 1. Automatically detects logged-in user's own handle (@username).
+ * 2. Tags user's own tweets with isOwnTweet: true to filter out feed/timeline noise.
+ * 3. Default 3-minute high-sensitivity sampling interval.
  * 4. Dual-display badges and dynamic comparison tables with overflow protection.
  */
 
 (function () {
   'use strict';
 
-  console.log('[X-Heat-Pulse] v1.3.0 Content script active.');
+  console.log('[X-Heat-Pulse] v1.4.0 Content script active.');
 
   const DEFAULT_INTERVAL_MINUTES = 3;
   let isScanning = false;
   let scanTimeout = null;
+  let myHandle = null;
 
   function scheduleScan() {
     if (scanTimeout) clearTimeout(scanTimeout);
     scanTimeout = setTimeout(processAllVisibleTweets, 250);
+  }
+
+  // Detect current logged-in user's screen name
+  function detectMyHandle() {
+    // 1. Check left sidebar profile link (most reliable on desktop)
+    const profileLink = document.querySelector('a[data-testid="AppTabBar_Profile_Link"]');
+    if (profileLink) {
+      const href = profileLink.getAttribute('href') || '';
+      const h = href.replace(/^\//, '').split('/')[0].split('?')[0].trim();
+      if (h && !['home', 'explore', 'notifications', 'messages', 'i', 'settings'].includes(h.toLowerCase())) {
+        return h;
+      }
+    }
+
+    // 2. Check left sidebar account switcher button
+    const switcher = document.querySelector('[data-testid="SideNav_AccountSwitcher_Button"]');
+    if (switcher) {
+      const match = switcher.textContent?.match(/@([a-zA-Z0-9_]{1,15})/);
+      if (match) return match[1];
+    }
+
+    // 3. Check profile page URL if currently viewing own profile
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    if (pathParts.length === 1 && !['home', 'explore', 'notifications', 'messages'].includes(pathParts[0].toLowerCase())) {
+      // If header says "Edit profile" button exists on page, it's definitely the user's profile!
+      const editBtn = document.querySelector('a[href="/settings/profile"], [data-testid="empty_state_button_text"]');
+      if (editBtn) {
+        return pathParts[0];
+      }
+    }
+
+    return null;
   }
 
   // Parse formatted numbers (e.g. 1,234, 1.2K, 3.5万, 1.5M, 97 Views)
@@ -44,7 +77,7 @@
   function extractElementCount(container) {
     if (!container) return 0;
 
-    // 1. Check title attribute (Twitter often puts full exact number like title="1,248" even when visible text is "1.2K")
+    // 1. Check title attribute first (contains exact number)
     const title = container.getAttribute('title');
     if (title) {
       const match = title.match(/([\d.,]+)\s*([kKmMwW万亿])?/);
@@ -142,7 +175,6 @@
     };
   }
 
-  // Format short delta text (e.g. "+18阅", "+2赞", "+5")
   function formatDeltaSummary(delta) {
     const parts = [];
     if (delta.likes > 0) parts.push(`+${delta.likes}赞`);
@@ -155,7 +187,6 @@
     return parts.join(" ");
   }
 
-  // Format elapsed time (e.g. "3 分钟前", "2.5 小时前")
   function formatElapsedTime(ms) {
     const mins = Math.floor(ms / 60000);
     if (mins < 1) return "刚刚";
@@ -176,12 +207,21 @@
         return;
       }
 
+      // Check current user's handle
+      const detected = detectMyHandle();
+      if (detected && detected !== myHandle) {
+        myHandle = detected;
+        await chrome.storage.local.set({ my_user_handle: detected });
+        console.log(`[X-Heat-Pulse] Logged in account identified: @${detected}`);
+      }
+
       // Fetch stored tweet records and config
-      const storage = await chrome.storage.local.get(["tweet_records", "config"]);
+      const storage = await chrome.storage.local.get(["tweet_records", "config", "my_user_handle"]);
       const tweetRecords = storage.tweet_records || {};
       const config = storage.config || { intervalMinutes: DEFAULT_INTERVAL_MINUTES };
       const intervalMinutes = config.intervalMinutes || DEFAULT_INTERVAL_MINUTES;
       const targetIntervalMs = intervalMinutes * 60 * 1000;
+      const savedHandle = storage.my_user_handle || myHandle || "";
       const now = Date.now();
 
       let hasNewRecords = false;
@@ -192,14 +232,20 @@
 
         const { tweetId, author, text, metrics, actionGroup } = data;
 
+        // Check if tweet belongs to current user
+        const isOwn = savedHandle
+          ? author.toLowerCase() === savedHandle.toLowerCase()
+          : false;
+
         // 1. Initial Baseline: First time user views this tweet
         if (!tweetRecords[tweetId]) {
           tweetRecords[tweetId] = {
             id: tweetId,
             author,
             text,
+            isOwnTweet: isOwn,
             firstSeenAt: now,
-            firstSeenMetrics: { ...metrics }, // Immutable baseline from first view
+            firstSeenMetrics: { ...metrics },
             snapshots: [
               { t: now, ...metrics }
             ]
@@ -210,8 +256,11 @@
         const record = tweetRecords[tweetId];
         record.lastSeen = now;
         if (text && !record.text) record.text = text;
+        if (isOwn && !record.isOwnTweet) {
+          record.isOwnTweet = true;
+          hasNewRecords = true;
+        }
 
-        // Guard: ensure firstSeenMetrics exists
         if (!record.firstSeenMetrics) {
           record.firstSeenMetrics = record.snapshots && record.snapshots.length > 0
             ? { ...record.snapshots[0] }
@@ -233,7 +282,6 @@
             ...metrics
           });
 
-          // Keep up to 60 snapshots per tweet (~3-5 hours of active tracking)
           if (record.snapshots.length > 60) {
             record.snapshots.shift();
           }
@@ -249,12 +297,16 @@
 
       // Persist to local storage
       if (hasNewRecords) {
-        // Safe prune: keep active tweets
         const tweetKeys = Object.keys(tweetRecords);
-        if (tweetKeys.length > 250) {
-          tweetKeys.sort((a, b) => (tweetRecords[b].lastSeen || 0) - (tweetRecords[a].lastSeen || 0));
+        if (tweetKeys.length > 300) {
+          // Prioritize keeping user's own tweets
+          tweetKeys.sort((a, b) => {
+            if (tweetRecords[b].isOwnTweet && !tweetRecords[a].isOwnTweet) return 1;
+            if (!tweetRecords[b].isOwnTweet && tweetRecords[a].isOwnTweet) return -1;
+            return (tweetRecords[b].lastSeen || 0) - (tweetRecords[a].lastSeen || 0);
+          });
           const trimmed = {};
-          tweetKeys.slice(0, 250).forEach(k => { trimmed[k] = tweetRecords[k]; });
+          tweetKeys.slice(0, 300).forEach(k => { trimmed[k] = tweetRecords[k]; });
           await chrome.storage.local.set({ tweet_records: trimmed });
         } else {
           await chrome.storage.local.set({ tweet_records: tweetRecords });
@@ -271,7 +323,6 @@
     return a.views !== b.views || a.likes !== b.likes || a.retweets !== b.retweets || a.replies !== b.replies || a.bookmarks !== b.bookmarks;
   }
 
-  // Compute both Interval Delta and Total Deltas
   function computeDeltas(record, now, targetIntervalMs, currMetrics, intervalMinutes) {
     const snapshots = record.snapshots || [];
     const firstMetrics = record.firstSeenMetrics || currMetrics;
@@ -342,6 +393,7 @@
 
     return {
       isNew,
+      isOwnTweet: record.isOwnTweet || false,
       intervalMinutes,
       pillClass,
       mainText,
@@ -420,9 +472,11 @@
         return `<span class="x-val-zero">+0</span>`;
       };
 
+      const ownTag = info.isOwnTweet ? `<span style="font-size:9.5px; background:rgba(56,189,248,0.18); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); padding:1px 5px; border-radius:4px; margin-left:6px;">我的帖子</span>` : '';
+
       tooltip.innerHTML = `
         <div class="x-heat-pulse-tooltip-header">
-          <span>📊 X 帖子热度时序追踪</span>
+          <span>📊 X 帖子热度时序追踪 ${ownTag}</span>
           <span style="font-size:10px; color:#64748b;">已持续追踪 ${info.totalAgeStr}</span>
         </div>
         <table class="x-heat-pulse-tooltip-table">
@@ -488,7 +542,6 @@
     }
   }
 
-  // User resets baseline for specific tweet
   async function resetTweetBaseline(tweetId, currentMetrics) {
     const storage = await chrome.storage.local.get("tweet_records");
     const tweetRecords = storage.tweet_records || {};
@@ -503,7 +556,6 @@
     }
   }
 
-  // Listen to DOM mutations for dynamic scrolling
   const observer = new MutationObserver((mutations) => {
     let hasRelevantMutation = false;
     for (const m of mutations) {
@@ -522,7 +574,6 @@
     subtree: true
   });
 
-  // Initial scan and quick periodic rescan (every 6 seconds)
   scheduleScan();
   setInterval(scheduleScan, 6000);
 

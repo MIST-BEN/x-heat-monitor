@@ -81,24 +81,29 @@ async function executePollingCycle(source = "SCHEDULED") {
   const timestamp = Date.now();
   console.log(`[X-Heat-Pulse] Starting polling cycle. Source: ${source}, Time: ${new Date(timestamp).toISOString()}`);
 
-  const storage = await chrome.storage.local.get(["config", "last_metrics", "history", "account_info", "tweet_records"]);
+  const storage = await chrome.storage.local.get(["config", "last_metrics", "history", "account_info", "tweet_records", "my_user_handle"]);
   const config = storage.config || DEFAULT_CONFIG;
   const history = storage.history || [];
   const lastMetrics = storage.last_metrics || null;
   const tweetRecords = storage.tweet_records || {};
+  const myHandle = (storage.my_user_handle || config.myHandle || "").trim().toLowerCase();
 
   try {
     let currentData = [];
     let accountInfo = storage.account_info || null;
 
-    // Priority 1: Check if we have real in-page captured tweet records from content_script
-    const recordKeys = Object.keys(tweetRecords);
-    if (recordKeys.length > 0) {
-      currentData = recordKeys.map(k => {
-        const item = tweetRecords[k];
+    // Priority 1: Check if we have real in-page captured tweet records for OWN account
+    const allRecords = Object.values(tweetRecords);
+    const ownRecords = allRecords.filter(t => t.isOwnTweet || (myHandle && t.author && t.author.toLowerCase() === myHandle));
+
+    // If own tweets exist, strictly track own tweets!
+    const targetRecords = ownRecords.length > 0 ? ownRecords : (allRecords.length > 0 ? allRecords : []);
+
+    if (targetRecords.length > 0) {
+      currentData = targetRecords.map(item => {
         const lastSnap = item.snapshots && item.snapshots.length > 0 ? item.snapshots[item.snapshots.length - 1] : {};
         return {
-          id: item.id || k,
+          id: item.id,
           text: item.text || "",
           metrics: {
             views: lastSnap.views || 0,
@@ -110,13 +115,11 @@ async function executePollingCycle(source = "SCHEDULED") {
         };
       });
 
-      if (!accountInfo && tweetRecords[recordKeys[0]].author) {
-        accountInfo = {
-          screen_name: tweetRecords[recordKeys[0]].author,
-          name: tweetRecords[recordKeys[0]].author,
-          type: "in_page_observer"
-        };
-      }
+      accountInfo = {
+        screen_name: myHandle || targetRecords[0].author || "You",
+        name: myHandle || targetRecords[0].author || "You",
+        type: ownRecords.length > 0 ? "own_account_tracker" : "in_page_observer"
+      };
     } else {
       // Priority 2: Fallback to session / API fetch
       const metricResult = await fetchXMetrics(config);
